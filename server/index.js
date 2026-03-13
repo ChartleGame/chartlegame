@@ -1,4 +1,5 @@
 "use strict";
+require("dotenv").config();
 
 const express    = require("express");
 const cors       = require("cors");
@@ -208,8 +209,12 @@ app.post("/api/auth/signup", async (req, res) => {
   if (!email || !password || !username) {
     return res.status(400).json({ error: "Email, username and password are required" });
   }
-  if (password.length < 8) {
-    return res.status(400).json({ error: "Password must be at least 8 characters" });
+  const pwErrors = [];
+  if (password.length < 8)            pwErrors.push("at least 8 characters");
+  if (!/[A-Z]/.test(password))        pwErrors.push("one uppercase letter");
+  if (!/[^A-Za-z0-9]/.test(password)) pwErrors.push("one special character");
+  if (pwErrors.length > 0) {
+    return res.status(400).json({ error: "Password must contain: " + pwErrors.join(", ") });
   }
 
   const users = getUsers();
@@ -241,10 +246,10 @@ app.post("/api/auth/signup", async (req, res) => {
     await resend.emails.send({
       from: process.env.EMAIL_FROM || "noreply@tradle.app",
       to: email,
-      subject: "Verify your Tradle account",
+      subject: "Verify your Chartle account",
       html: `
         <div style="font-family: monospace; max-width: 480px; margin: 0 auto; padding: 40px 20px;">
-          <h2 style="color: #00a65a; letter-spacing: 2px;">TRADLE</h2>
+          <h2 style="color: #00a65a; letter-spacing: 2px;">CHARTLE</h2>
           <p>Welcome, <strong>${username}</strong>!</p>
           <p>Click the link below to verify your email address:</p>
           <a href="${process.env.BASE_URL}/api/auth/verify?token=${verifyToken}"
@@ -354,10 +359,10 @@ app.post("/api/auth/forgot-password", async (req, res) => {
     await resend.emails.send({
       from: process.env.EMAIL_FROM || "noreply@tradle.app",
       to: user.email,
-      subject: "Reset your Tradle password",
+      subject: "Reset your Chartle password",
       html: `
         <div style="font-family: monospace; max-width: 480px; margin: 0 auto; padding: 40px 20px;">
-          <h2 style="color: #00a65a; letter-spacing: 2px;">TRADLE</h2>
+          <h2 style="color: #00a65a; letter-spacing: 2px;">CHARTLE</h2>
           <p>You requested a password reset.</p>
           <a href="${process.env.BASE_URL}/reset-password?token=${resetToken}"
              style="display:inline-block;margin:20px 0;padding:12px 24px;background:#00a65a;color:#fff;text-decoration:none;border-radius:6px;font-weight:700;letter-spacing:1px;">
@@ -599,6 +604,47 @@ async function handleStripeWebhook(req, res) {
 
   res.json({ received: true });
 }
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// JOURNAL ENDPOINTS — server-side per-user storage
+// ─────────────────────────────────────────────────────────────────────────────
+
+function getJournalFile(userId) {
+  return path.join(DATA_DIR, "journals", `${userId}.json`);
+}
+function getUserJournal(userId) {
+  const f = getJournalFile(userId);
+  if (!fs.existsSync(f)) return {};
+  try { return JSON.parse(fs.readFileSync(f, "utf8")); } catch { return {}; }
+}
+function saveUserJournal(userId, data) {
+  const dir = path.join(DATA_DIR, "journals");
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(getJournalFile(userId), JSON.stringify(data), "utf8");
+}
+
+// GET /api/journal — get all entries for logged-in user
+app.get("/api/journal", requireAuth, (req, res) => {
+  const journal = getUserJournal(req.user.id);
+  res.json(journal);
+});
+
+// POST /api/journal/:key — save a single entry
+app.post("/api/journal/:key", requireAuth, (req, res) => {
+  const journal = getUserJournal(req.user.id);
+  journal[req.params.key] = req.body;
+  saveUserJournal(req.user.id, journal);
+  res.json({ ok: true });
+});
+
+// DELETE /api/journal/:key — delete a single entry
+app.delete("/api/journal/:key", requireAuth, (req, res) => {
+  const journal = getUserJournal(req.user.id);
+  delete journal[req.params.key];
+  saveUserJournal(req.user.id, journal);
+  res.json({ ok: true });
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CRON — run within the same process (also available standalone via cron.js)

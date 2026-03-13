@@ -991,7 +991,13 @@ function JournalPage({ seed, scoreData, direction, sl, tp, entryPrice, asset, tf
       savedAt: Date.now(),
     };
     try {
-      await window.storage.set(storageKey, JSON.stringify(entry));
+      if (window.auth.isLoggedIn()) {
+        await window.apiFetch(`/api/journal/${storageKey}`, {
+          method: "POST", body: JSON.stringify(entry),
+        });
+      } else {
+        await window.storage.set(storageKey, JSON.stringify(entry));
+      }
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
       setRealEntries(prev => [entry, ...prev.filter(e => e.seed !== seed)]);
@@ -1385,7 +1391,7 @@ function ConsensusPage({ seed, scoreData, direction, sl, tp, entryPrice, T, L })
 
 
 // ── Auth Modal ─────────────────────────────────────────────────────────────────
-function AuthModal({ T, onSuccess, onClose }) {
+function AuthModal({ T, L, onSuccess, onClose }) {
   const [mode, setMode] = React.useState("login"); // login | signup | forgot
   const [email, setEmail] = React.useState("");
   const [username, setUsername] = React.useState("");
@@ -1449,7 +1455,7 @@ function AuthModal({ T, onSuccess, onClose }) {
             TRA<span style={{ color: T.green }}>DLE</span>
           </div>
           <div style={{ fontSize: 11, color: T.textMuted, letterSpacing: 2, marginTop: 4 }}>
-            {mode === "login" ? "SIGN IN" : mode === "signup" ? "CREATE ACCOUNT" : "RESET PASSWORD"}
+            {mode === "login" ? L.signIn : mode === "signup" ? L.createAccount : L.resetPassword}
           </div>
         </div>
 
@@ -1468,7 +1474,7 @@ function AuthModal({ T, onSuccess, onClose }) {
           {error && <div style={{ fontSize: 11, color: "#ff5050", padding: "6px 0" }}>{error}</div>}
           {info  && <div style={{ fontSize: 11, color: T.green, padding: "6px 0" }}>{info}</div>}
           <button style={btn()} onClick={submit} disabled={loading}>
-            {loading ? "..." : mode === "login" ? "SIGN IN" : mode === "signup" ? "CREATE ACCOUNT" : "SEND RESET LINK"}
+            {loading ? "..." : mode === "login" ? L.signIn : mode === "signup" ? L.createAccount : L.sendResetLink}
           </button>
         </div>
 
@@ -1476,17 +1482,17 @@ function AuthModal({ T, onSuccess, onClose }) {
           {mode === "login" && <>
             <button onClick={() => { setMode("signup"); setError(""); setInfo(""); }}
               style={{ background: "none", border: "none", color: T.textMuted, fontSize: 11, cursor: "pointer", letterSpacing: 1 }}>
-              No account? CREATE ONE →
+              {L.noAccount}
             </button>
             <button onClick={() => { setMode("forgot"); setError(""); setInfo(""); }}
               style={{ background: "none", border: "none", color: T.textDim, fontSize: 10, cursor: "pointer" }}>
-              Forgot password?
+              {L.forgotPassword}
             </button>
           </>}
           {mode !== "login" && (
             <button onClick={() => { setMode("login"); setError(""); setInfo(""); }}
               style={{ background: "none", border: "none", color: T.textMuted, fontSize: 11, cursor: "pointer", letterSpacing: 1 }}>
-              ← BACK TO SIGN IN
+              {L.backToSignIn}
             </button>
           )}
         </div>
@@ -1515,7 +1521,7 @@ function AccountButton({ T, user, onLogin, onLogout, onManage }) {
         letterSpacing: 1, fontFamily: "'JetBrains Mono', monospace",
         display: "flex", alignItems: "center", gap: 6,
       }}>
-        <span>⬡</span> SIGN IN
+        <span>⬡</span> {L.signInBtn}
       </button>
     );
   }
@@ -1567,18 +1573,18 @@ function AccountButton({ T, user, onLogin, onLogout, onManage }) {
                 {isPaid ? "⭐ PRO" : "FREE"}
               </div>
               {!user.verified && (
-                <div style={{ fontSize: 9, color: "#f59e0b", letterSpacing: 1 }}>⚠ UNVERIFIED</div>
+                <div style={{ fontSize: 9, color: "#f59e0b", letterSpacing: 1 }}>{L.unverified}</div>
               )}
             </div>
           </div>
 
           {/* Menu items */}
           {[
-            !isPaid && { label: "⭐ Upgrade to Pro — $3.99/mo", action: onManage, highlight: true },
-            isPaid  && { label: "💳 Manage Subscription", action: onManage },
-            { label: "⚙ Account Settings", action: () => { setOpen(false); onManage("settings"); } },
+            !isPaid && { label: L.upgradePro, action: onManage, highlight: true },
+            isPaid  && { label: L.manageSubscription, action: onManage },
+            { label: L.accountSettings, action: () => { setOpen(false); onManage("settings"); } },
             { label: "—", divider: true },
-            { label: "Sign out", action: () => { setOpen(false); onLogout(); }, danger: true },
+            { label: L.signOut, action: () => { setOpen(false); onLogout(); }, danger: true },
           ].filter(Boolean).map((item, i) => item.divider
             ? <div key={i} style={{ height: 1, background: T.borderFaint, margin: "4px 0" }} />
             : (
@@ -1601,7 +1607,7 @@ function AccountButton({ T, user, onLogin, onLogout, onManage }) {
 }
 
 // ── Paywall Modal ───────────────────────────────────────────────────────────────
-function PaywallModal({ T, user, onClose, onUpgrade, reason }) {
+function PaywallModal({ T, L, user, onClose, onUpgrade, reason }) {
   return (
     <div style={{
       position: "fixed", inset: 0, zIndex: 1000,
@@ -1615,16 +1621,13 @@ function PaywallModal({ T, user, onClose, onUpgrade, reason }) {
       }}>
         <div style={{ fontSize: 32, marginBottom: 12 }}>⭐</div>
         <div style={{ fontSize: 18, fontWeight: 900, color: T.text, fontFamily: "'Space Grotesk', sans-serif", letterSpacing: -0.5, marginBottom: 8 }}>
-          {reason === "daily_limit" ? "Daily Limit Reached" : "Practice Charts — Pro Feature"}
+          {reason === "daily_limit" ? L.dailyLimitTitle : L.practiceFeatureTitle}
         </div>
         <div style={{ fontSize: 12, color: T.textMuted, lineHeight: 1.7, marginBottom: 24 }}>
-          {reason === "daily_limit"
-            ? "Free accounts get 3 practice charts per day. Come back tomorrow, or upgrade for unlimited access."
-            : "Unlimited practice charts for serious traders."
-          }
+          {reason === "daily_limit" ? L.dailyLimitMsg : L.practiceFeatureMsg}
         </div>
         <div style={{ background: T.surfaceMed, border: `1px solid ${T.borderMed}`, borderRadius: 10, padding: "16px 20px", marginBottom: 24, textAlign: "left" }}>
-          {["Unlimited practice charts", "All assets & timeframes", "Full journal & stats", "Priority support"].map((f, i) => (
+          {[L.unlimitedPractice, L.allAssets, L.fullJournal, L.prioritySupport].map((f, i) => (
             <div key={i} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: i < 3 ? 8 : 0 }}>
               <span style={{ color: T.green, fontSize: 12 }}>✓</span>
               <span style={{ fontSize: 12, color: T.text }}>{f}</span>
@@ -1632,28 +1635,28 @@ function PaywallModal({ T, user, onClose, onUpgrade, reason }) {
           ))}
         </div>
         <div style={{ fontSize: 28, fontWeight: 900, fontFamily: "'Space Grotesk', sans-serif", color: T.text, marginBottom: 4 }}>
-          $3.99<span style={{ fontSize: 13, color: T.textMuted, fontWeight: 400 }}>/month</span>
+          $3.99<span style={{ fontSize: 13, color: T.textMuted, fontWeight: 400 }}>{L.perMonth}</span>
         </div>
-        <div style={{ fontSize: 10, color: T.textDim, marginBottom: 20 }}>USD · CAD · EUR · Cancel anytime</div>
+        <div style={{ fontSize: 10, color: T.textDim, marginBottom: 20 }}>{L.cancelAnytime}</div>
         <button onClick={onUpgrade} style={{
           width: "100%", padding: "14px", borderRadius: 8, border: "none",
           background: T.greenGrad, color: "#000", fontSize: 13, fontWeight: 700,
           letterSpacing: 2, cursor: "pointer", fontFamily: "'JetBrains Mono', monospace",
           boxShadow: T.greenGlow,
         }}>
-          UPGRADE TO PRO →
+          {L.upgradeBtn}
         </button>
         <button onClick={onClose} style={{
           marginTop: 12, background: "none", border: "none", color: T.textDim,
           fontSize: 11, cursor: "pointer",
-        }}>Maybe later</button>
+        }}>{L.maybeLater}</button>
       </div>
     </div>
   );
 }
 
 // ── Account Settings Modal ──────────────────────────────────────────────────────
-function AccountSettingsModal({ T, user, onClose, onUserUpdate }) {
+function AccountSettingsModal({ T, L, user, onClose, onUserUpdate }) {
   const [tab, setTab] = React.useState("profile");
   const [username, setUsername] = React.useState(user.username || "");
   const [currentPw, setCurrentPw] = React.useState("");
@@ -1702,7 +1705,7 @@ function AccountSettingsModal({ T, user, onClose, onUserUpdate }) {
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div style={{ background: T.pageBg, border: `1px solid ${T.borderMed}`, borderRadius: 14, padding: "28px", width: 420, animation: "fadeIn 0.18s ease" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, letterSpacing: 2, color: T.text }}>ACCOUNT SETTINGS</div>
+          <div style={{ fontSize: 14, fontWeight: 700, letterSpacing: 2, color: T.text }}>{L.accountSettingsTitle}</div>
           <button onClick={onClose} style={{ background: "none", border: "none", color: T.textMuted, cursor: "pointer", fontSize: 18 }}>✕</button>
         </div>
         <div style={{ display: "flex", gap: 4, marginBottom: 20 }}>
@@ -1712,41 +1715,39 @@ function AccountSettingsModal({ T, user, onClose, onUserUpdate }) {
               border: `1px solid ${tab === t ? T.borderStr : T.borderFaint}`,
               background: tab === t ? T.surfaceHov : "transparent",
               color: tab === t ? T.text : T.textSub, fontFamily: "'JetBrains Mono', monospace",
-            }}>{t === "profile" ? "PROFILE" : "DANGER ZONE"}</button>
+            }}>{t === "profile" ? L.profileTab : L.dangerTab}</button>
           ))}
         </div>
 
         {tab === "profile" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <div>
-              <div style={{ fontSize: 9, color: T.textLabel, letterSpacing: 2, marginBottom: 5 }}>USERNAME</div>
+              <div style={{ fontSize: 9, color: T.textLabel, letterSpacing: 2, marginBottom: 5 }}>{L.usernameLabel}</div>
               <input style={inp} value={username} onChange={e => setUsername(e.target.value)} />
             </div>
             <div style={{ height: 1, background: T.borderFaint, margin: "4px 0" }} />
-            <div style={{ fontSize: 9, color: T.textLabel, letterSpacing: 2, marginBottom: 5 }}>CHANGE PASSWORD</div>
-            <input style={inp} type="password" placeholder="Current password" value={currentPw} onChange={e => setCurrentPw(e.target.value)} />
-            <input style={inp} type="password" placeholder="New password" value={newPw} onChange={e => setNewPw(e.target.value)} />
+            <div style={{ fontSize: 9, color: T.textLabel, letterSpacing: 2, marginBottom: 5 }}>{L.changePassword}</div>
+            <input style={inp} type="password" placeholder={L.currentPassword} value={currentPw} onChange={e => setCurrentPw(e.target.value)} />
+            <input style={inp} type="password" placeholder={L.newPassword} value={newPw} onChange={e => setNewPw(e.target.value)} />
             {msg.text && <div style={{ fontSize: 11, color: msg.type === "ok" ? T.green : "#ff5050" }}>{msg.text}</div>}
             <button onClick={saveProfile} disabled={loading} style={{
               padding: "11px", borderRadius: 6, border: "none", background: T.surfaceMed,
               color: T.text, fontSize: 11, fontWeight: 700, letterSpacing: 1, cursor: "pointer",
               fontFamily: "'JetBrains Mono', monospace",
-            }}>{loading ? "..." : "SAVE CHANGES"}</button>
+            }}>{loading ? "..." : L.saveChanges}</button>
           </div>
         )}
 
         {tab === "danger" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <div style={{ fontSize: 11, color: T.textMuted, lineHeight: 1.6, marginBottom: 6 }}>
-              Deleting your account is permanent. All your journal entries and stats will be lost.
-            </div>
-            <input style={inp} type="password" placeholder="Enter password to confirm" value={deletePw} onChange={e => setDeletePw(e.target.value)} />
+            <div style={{ fontSize: 11, color: T.textMuted, lineHeight: 1.6, marginBottom: 6 }}>{L.deleteWarning}</div>
+            <input style={inp} type="password" placeholder={L.confirmPassword} value={deletePw} onChange={e => setDeletePw(e.target.value)} />
             {msg.text && <div style={{ fontSize: 11, color: "#ff5050" }}>{msg.text}</div>}
             <button onClick={deleteAccount} disabled={loading} style={{
               padding: "11px", borderRadius: 6, border: "1px solid rgba(255,80,80,0.3)",
               background: "rgba(255,80,80,0.08)", color: "#ff5050", fontSize: 11, fontWeight: 700,
               letterSpacing: 1, cursor: "pointer", fontFamily: "'JetBrains Mono', monospace",
-            }}>{loading ? "..." : "DELETE MY ACCOUNT"}</button>
+            }}>{loading ? "..." : L.deleteAccount}</button>
           </div>
         )}
       </div>
@@ -1826,6 +1827,50 @@ const LANG = {
     yourVsCommunity: "YOUR TRADE VS COMMUNITY",
     yourSl: "YOUR SL", yourTp: "YOUR TP", yourScore: "YOUR SCORE",
     avgLabel: (v) => `avg ${v}`, topLabel: (v) => `top ${v}`,
+    // Auth modal
+    signIn: "SIGN IN", createAccount: "CREATE ACCOUNT", resetPassword: "RESET PASSWORD",
+    sendResetLink: "SEND RESET LINK",
+    emailPlaceholder: "Email", usernamePlaceholder: "Username",
+    passwordPlaceholder: "Password (min 8 chars, 1 uppercase, 1 symbol)",
+    noAccount: "No account? CREATE ONE →", forgotPassword: "Forgot password?",
+    backToSignIn: "← BACK TO SIGN IN",
+    // Account button
+    signInBtn: "SIGN IN",
+    signOut: "Sign out",
+    upgradePro: "⭐ Upgrade to Pro — $3.99/mo",
+    manageSubscription: "💳 Manage Subscription",
+    accountSettings: "⚙ Account Settings",
+    unverified: "⚠ UNVERIFIED",
+    // Practice bar
+    dailyChartLabel: "DAILY CHART",
+    practiceLabel: "PRACTICE",
+    offlineChart: "Using offline chart — server unavailable",
+    practiceToday: "practice today",
+    newPracticeBtn: "NEW PRACTICE CHART →",
+    // Paywall
+    dailyLimitTitle: "Daily Limit Reached",
+    practiceFeatureTitle: "Practice Charts — Pro Feature",
+    dailyLimitMsg: "Free accounts get 3 practice charts per day. Come back tomorrow, or upgrade for unlimited access.",
+    practiceFeatureMsg: "Unlimited practice charts for serious traders.",
+    unlimitedPractice: "Unlimited practice charts",
+    allAssets: "All assets & timeframes",
+    fullJournal: "Full journal & stats",
+    prioritySupport: "Priority support",
+    perMonth: "/month",
+    cancelAnytime: "USD · CAD · EUR · Cancel anytime",
+    upgradeBtn: "UPGRADE TO PRO →",
+    maybeLater: "Maybe later",
+    // Account settings
+    accountSettingsTitle: "ACCOUNT SETTINGS",
+    profileTab: "PROFILE", dangerTab: "DANGER ZONE",
+    usernameLabel: "USERNAME",
+    changePassword: "CHANGE PASSWORD",
+    currentPassword: "Current password",
+    newPassword: "New password",
+    saveChanges: "SAVE CHANGES",
+    deleteWarning: "Deleting your account is permanent. All your journal entries and stats will be lost.",
+    confirmPassword: "Enter password to confirm",
+    deleteAccount: "DELETE MY ACCOUNT",
   },
   fr: {
     dailyTrade: "TRADE QUOTIDIEN",
@@ -1897,6 +1942,50 @@ const LANG = {
     yourVsCommunity: "VOTRE TRADE VS COMMUNAUTÉ",
     yourSl: "VOTRE SL", yourTp: "VOTRE TP", yourScore: "VOTRE SCORE",
     avgLabel: (v) => `moy. ${v}`, topLabel: (v) => `top ${v}`,
+    // Auth modal
+    signIn: "SE CONNECTER", createAccount: "CRÉER UN COMPTE", resetPassword: "RÉINITIALISER",
+    sendResetLink: "ENVOYER LE LIEN",
+    emailPlaceholder: "Courriel", usernamePlaceholder: "Nom d'utilisateur",
+    passwordPlaceholder: "Mot de passe (8 car. min, 1 maj., 1 symbole)",
+    noAccount: "Pas de compte ? EN CRÉER UN →", forgotPassword: "Mot de passe oublié ?",
+    backToSignIn: "← RETOUR À LA CONNEXION",
+    // Account button
+    signInBtn: "CONNEXION",
+    signOut: "Se déconnecter",
+    upgradePro: "⭐ Passer à Pro — 3,99 $/mois",
+    manageSubscription: "💳 Gérer l'abonnement",
+    accountSettings: "⚙ Paramètres du compte",
+    unverified: "⚠ NON VÉRIFIÉ",
+    // Practice bar
+    dailyChartLabel: "GRAPHIQUE DU JOUR",
+    practiceLabel: "PRATIQUE",
+    offlineChart: "Graphique hors ligne — serveur indisponible",
+    practiceToday: "pratique aujourd'hui",
+    newPracticeBtn: "NOUVEAU GRAPHIQUE →",
+    // Paywall
+    dailyLimitTitle: "Limite Quotidienne Atteinte",
+    practiceFeatureTitle: "Graphiques de Pratique — Fonctionnalité Pro",
+    dailyLimitMsg: "Les comptes gratuits ont 3 graphiques de pratique par jour. Revenez demain ou passez à Pro.",
+    practiceFeatureMsg: "Graphiques de pratique illimités pour les traders sérieux.",
+    unlimitedPractice: "Graphiques de pratique illimités",
+    allAssets: "Tous les actifs et unités de temps",
+    fullJournal: "Journal et statistiques complets",
+    prioritySupport: "Support prioritaire",
+    perMonth: "/mois",
+    cancelAnytime: "USD · CAD · EUR · Annulez à tout moment",
+    upgradeBtn: "PASSER À PRO →",
+    maybeLater: "Peut-être plus tard",
+    // Account settings
+    accountSettingsTitle: "PARAMÈTRES DU COMPTE",
+    profileTab: "PROFIL", dangerTab: "ZONE DANGEREUSE",
+    usernameLabel: "NOM D'UTILISATEUR",
+    changePassword: "CHANGER LE MOT DE PASSE",
+    currentPassword: "Mot de passe actuel",
+    newPassword: "Nouveau mot de passe",
+    saveChanges: "SAUVEGARDER",
+    deleteWarning: "La suppression de votre compte est permanente. Toutes vos entrées de journal seront perdues.",
+    confirmPassword: "Entrez votre mot de passe pour confirmer",
+    deleteAccount: "SUPPRIMER MON COMPTE",
   },
 };
 
@@ -2241,7 +2330,7 @@ function ChartGame() {
 
           {/* Account */}
           <AccountButton
-            T={T}
+            T={T} L={L}
             user={user}
             onLogin={() => setShowAuth(true)}
             onLogout={() => { window.auth.clear(); setUser(null); }}
@@ -2261,14 +2350,14 @@ function ChartGame() {
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             {isPractice && (
               <span style={{ fontSize: 9, letterSpacing: 2, color: "#a78bfa", padding: "2px 8px", borderRadius: 4, background: "rgba(167,139,250,0.1)", border: "1px solid rgba(167,139,250,0.2)" }}>
-                PRACTICE
+                {L.practiceLabel}
               </span>
             )}
             {chartError && (
-              <span style={{ fontSize: 9, color: "#f59e0b", letterSpacing: 1 }}>⚠ {chartError}</span>
+              <span style={{ fontSize: 9, color: "#f59e0b", letterSpacing: 1 }}>⚠ {L.offlineChart}</span>
             )}
             {!isPractice && !chartError && (
-              <span style={{ fontSize: 9, color: T.textDim, letterSpacing: 2 }}>DAILY CHART</span>
+              <span style={{ fontSize: 9, color: T.textDim, letterSpacing: 2 }}>{L.dailyChartLabel}</span>
             )}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -2291,7 +2380,7 @@ function ChartGame() {
                 color: T.textMuted, fontFamily: "'JetBrains Mono', monospace",
                 transition: "all 0.15s",
               }}>
-              NEW PRACTICE CHART →
+              {L.newPracticeBtn}
             </button>
           </div>
         </div>
@@ -2563,20 +2652,20 @@ function ChartGame() {
       </div>{/* end game page */}
       {/* ── Modals ── */}
       {showAuth && (
-        <AuthModal T={T}
+        <AuthModal T={T} L={L}
           onSuccess={(u) => { setUser(u); setShowAuth(false); }}
           onClose={() => setShowAuth(false)}
         />
       )}
       {showPaywall && (
-        <PaywallModal T={T} user={user}
+        <PaywallModal T={T} L={L} user={user}
           reason={paywallReason}
           onClose={() => setShowPaywall(false)}
           onUpgrade={handleUpgrade}
         />
       )}
       {showSettings && user && (
-        <AccountSettingsModal T={T} user={user}
+        <AccountSettingsModal T={T} L={L} user={user}
           onClose={() => setShowSettings(false)}
           onUserUpdate={(u) => { setUser(u); if (!u) { setShowSettings(false); } }}
         />
