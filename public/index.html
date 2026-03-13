@@ -1989,6 +1989,345 @@ const LANG = {
   },
 };
 
+
+// ── Mobile detection hook ──────────────────────────────────────────────────────
+function useIsMobile() {
+  const [isMobile, setIsMobile] = React.useState(() => window.innerWidth < 768);
+  React.useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
+  return isMobile;
+}
+
+// ── Mobile Trade Controls (bottom sheet) ──────────────────────────────────────
+function MobileTradeSheet({
+  T, L, phase, entryPrice, direction, setDirection,
+  sl, setSl, tp, setTp, onTrade, onReset, scoreData,
+  previewPrice, error,
+}) {
+  const [open, setOpen] = React.useState(false);
+
+  const previewSl  = previewPrice?.tool === "set-sl" ? previewPrice.price : null;
+  const previewTp  = previewPrice?.tool === "set-tp" ? previewPrice.price : null;
+  const displaySl  = previewSl !== null ? previewSl  : parseFloat(sl)  || null;
+  const displayTp  = previewTp !== null ? previewTp  : parseFloat(tp)  || null;
+  const displayDir = previewPrice
+    ? (displaySl !== null && displayTp !== null
+        ? (displayTp > displaySl ? "long" : "short")
+        : previewSl !== null ? (previewSl < entryPrice ? "long" : "short")
+        : previewTp !== null ? (previewTp > entryPrice ? "long" : "short")
+        : direction)
+    : direction;
+  const displayRR = displaySl !== null && displayTp !== null
+    ? Math.abs(displayTp - entryPrice) / Math.abs(displaySl - entryPrice)
+    : null;
+  const isPreviewing = previewPrice !== null;
+
+  const inpStyle = (color) => ({
+    width: "100%", padding: "12px 14px", borderRadius: 8,
+    background: color ? `${color}10` : T.surfaceMed,
+    border: `1px solid ${color ? `${color}40` : T.borderMed}`,
+    color: color || T.text, fontSize: 16, outline: "none",
+    fontFamily: "'JetBrains Mono', monospace",
+    WebkitAppearance: "none",
+  });
+
+  // Pill summary shown when sheet is closed
+  const pill = (
+    <div
+      onClick={() => phase === "setup" && setOpen(true)}
+      style={{
+        position: "absolute", bottom: 0, left: 0, right: 0,
+        background: T.pageBg,
+        borderTop: `1px solid ${T.borderMed}`,
+        padding: "10px 16px",
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        cursor: phase === "setup" ? "pointer" : "default",
+        zIndex: 10,
+      }}>
+      <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+        <div style={{ fontSize: 11, color: T.textMuted }}>{L.entryPrice}</div>
+        <div style={{ fontSize: 15, fontWeight: 700, color: T.text, fontFamily: "'Space Grotesk', sans-serif" }}>
+          {entryPrice.toFixed(2)}
+        </div>
+        {displayDir && (
+          <div style={{
+            fontSize: 10, fontWeight: 700, letterSpacing: 1,
+            padding: "3px 10px", borderRadius: 4,
+            color: displayDir === "long" ? T.green : "#ff5050",
+            background: displayDir === "long" ? T.greenDim : "rgba(255,80,80,0.1)",
+            border: `1px solid ${displayDir === "long" ? T.greenBdr : "rgba(255,80,80,0.3)"}`,
+          }}>
+            {displayDir === "long" ? L.long : L.short}
+          </div>
+        )}
+        {displayRR !== null && (
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#60a5fa" }}>1:{displayRR.toFixed(2)}</div>
+        )}
+      </div>
+      {phase === "setup" ? (
+        <div style={{ fontSize: 11, color: T.green, letterSpacing: 1 }}>{L.execute} ↑</div>
+      ) : phase === "playing" ? (
+        <div style={{ fontSize: 11, color: T.green, letterSpacing: 2, animation: "pulse 1s infinite" }}>● {L.liveLabel}</div>
+      ) : null}
+    </div>
+  );
+
+  if (!open || phase !== "setup") return pill;
+
+  return (
+    <div style={{
+      position: "absolute", bottom: 0, left: 0, right: 0,
+      background: T.pageBg, borderTop: `2px solid ${T.borderMed}`,
+      borderRadius: "16px 16px 0 0",
+      padding: "0 16px 24px",
+      zIndex: 20,
+      maxHeight: "80vh", overflowY: "auto",
+      boxShadow: "0 -8px 32px rgba(0,0,0,0.4)",
+      animation: "slideUp 0.2s ease",
+    }}>
+      {/* Handle + header */}
+      <div style={{ display: "flex", justifyContent: "center", padding: "10px 0 6px" }}>
+        <div style={{ width: 36, height: 4, borderRadius: 2, background: T.borderMed }} />
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <div style={{ fontSize: 11, color: T.textMuted, letterSpacing: 2 }}>{L.entryPrice}: <span style={{ color: T.text, fontWeight: 700 }}>{entryPrice.toFixed(2)}</span></div>
+        <button onClick={() => setOpen(false)} style={{ background: "none", border: "none", color: T.textMuted, fontSize: 20, cursor: "pointer", padding: "0 4px" }}>↓</button>
+      </div>
+
+      {/* Direction */}
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 9, color: T.textMuted, letterSpacing: 2, marginBottom: 8 }}>{L.direction}</div>
+        <div style={{ display: "flex", gap: 8 }}>
+          {[["long", L.long, T.green], ["short", L.short, "#ff5050"]].map(([d, label, color]) => (
+            <button key={d} onClick={() => setDirection(d)} style={{
+              flex: 1, padding: "14px 0", borderRadius: 8, fontSize: 14, fontWeight: 700,
+              cursor: "pointer", border: `2px solid ${displayDir === d ? color : T.border}`,
+              background: displayDir === d ? `${color}18` : "transparent",
+              color: displayDir === d ? color : T.textMuted, letterSpacing: 1,
+              fontFamily: "'JetBrains Mono', monospace",
+            }}>{label}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* SL + TP row */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+        <div>
+          <div style={{ fontSize: 9, color: "#ff5050", letterSpacing: 2, marginBottom: 6 }}>{L.stopLoss}</div>
+          <input type="number" inputMode="decimal"
+            value={isPreviewing && previewSl !== null ? previewSl.toFixed(2) : sl}
+            onChange={e => {
+              setSl(e.target.value);
+              const slNum = parseFloat(e.target.value), tpNum = parseFloat(tp);
+              if (!isNaN(slNum) && !isNaN(tpNum)) setDirection(tpNum > slNum ? "long" : "short");
+            }}
+            placeholder={entryPrice.toFixed(2)}
+            style={inpStyle("#ff5050")} />
+          <div style={{ display: "flex", gap: 4, marginTop: 6 }}>
+            {[2,3,4].map(r => {
+              const tpNum = parseFloat(tp);
+              const ok = direction && !isNaN(tpNum);
+              return (
+                <button key={r} onClick={() => {
+                  if (!ok) return;
+                  const reward = Math.abs(tpNum - entryPrice);
+                  setSl((direction === "long" ? entryPrice - reward/r : entryPrice + reward/r).toFixed(2));
+                }} style={{
+                  flex: 1, padding: "6px 0", borderRadius: 4, fontSize: 11,
+                  border: "1px solid rgba(255,80,80,0.25)",
+                  background: ok ? "rgba(255,80,80,0.08)" : T.surfaceMed,
+                  color: ok ? "#ff8080" : T.textDim, cursor: ok ? "pointer" : "not-allowed",
+                  fontFamily: "'JetBrains Mono', monospace",
+                }}>1:{r}</button>
+              );
+            })}
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize: 9, color: T.green, letterSpacing: 2, marginBottom: 6 }}>{L.takeProfit}</div>
+          <input type="number" inputMode="decimal"
+            value={isPreviewing && previewTp !== null ? previewTp.toFixed(2) : tp}
+            onChange={e => {
+              setTp(e.target.value);
+              const tpNum = parseFloat(e.target.value), slNum = parseFloat(sl);
+              if (!isNaN(tpNum) && !isNaN(slNum)) setDirection(tpNum > slNum ? "long" : "short");
+            }}
+            placeholder={entryPrice.toFixed(2)}
+            style={inpStyle(T.green)} />
+          <div style={{ display: "flex", gap: 4, marginTop: 6 }}>
+            {[2,3,4].map(r => {
+              const slNum = parseFloat(sl);
+              const ok = direction && !isNaN(slNum);
+              return (
+                <button key={r} onClick={() => {
+                  if (!ok) return;
+                  const risk = Math.abs(entryPrice - slNum);
+                  setTp((direction === "long" ? entryPrice + risk*r : entryPrice - risk*r).toFixed(2));
+                }} style={{
+                  flex: 1, padding: "6px 0", borderRadius: 4, fontSize: 11,
+                  border: `1px solid ${T.greenBdr}`,
+                  background: ok ? T.greenBgBtn : T.surfaceMed,
+                  color: ok ? T.green : T.textDim, cursor: ok ? "pointer" : "not-allowed",
+                  fontFamily: "'JetBrains Mono', monospace",
+                }}>1:{r}</button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* R:R */}
+      {displayRR !== null && (
+        <div style={{ textAlign: "center", marginBottom: 14 }}>
+          <span style={{ fontSize: 11, color: T.textMuted, letterSpacing: 2 }}>{L.rrRatio} </span>
+          <span style={{ fontSize: 20, fontWeight: 700, color: "#60a5fa", fontFamily: "'Space Grotesk', sans-serif" }}>
+            1:{displayRR.toFixed(2)}
+          </span>
+        </div>
+      )}
+
+      {error && <div style={{ fontSize: 11, color: "#ff5050", marginBottom: 8, textAlign: "center" }}>{error}</div>}
+
+      <button onClick={() => { onTrade(); setOpen(false); }} style={{
+        width: "100%", padding: "16px", borderRadius: 10, border: "none",
+        background: T.greenGrad, color: "#000", fontSize: 14, fontWeight: 700,
+        letterSpacing: 2, cursor: "pointer", fontFamily: "'JetBrains Mono', monospace",
+        boxShadow: T.greenGlow,
+      }}>{L.execute}</button>
+    </div>
+  );
+}
+
+// ── Mobile game page ──────────────────────────────────────────────────────────
+function MobileGamePage({
+  T, L, phase, candles, future, visibleFuture, indicators, setIndicators,
+  tradeLines, entryPrice, drawings, activeTool, setActiveTool, clearSignal,
+  onDrawingAdd, onSetSl, onSetTp, onPreviewPrice, previewPrice,
+  direction, setDirection, sl, setSl, tp, setTp,
+  onTrade, onReset, scoreData, error, isPractice, chartError,
+  user, practiceUsed, loadPracticeChart,
+}) {
+  const [showTools, setShowTools] = React.useState(false);
+
+  const MOBILE_TOOLS = [
+    { id: "hline",      icon: "—",  tipKey: "tipHline" },
+    { id: "trendline",  icon: "↗",  tipKey: "tipTrend" },
+    { id: "set-sl",     icon: "SL", tipKey: "tipSetSl" },
+    { id: "set-tp",     icon: "TP", tipKey: "tipSetTp" },
+    { id: "ma20",       icon: "20", tipKey: "tipMa20",  isMa: true },
+    { id: "ma50",       icon: "50", tipKey: "tipMa50",  isMa: true },
+    { id: "ma100",      icon: "100",tipKey: "tipMa100", isMa: true },
+    { id: "trash",      icon: "🗑", tipKey: "tipTrash" },
+  ];
+
+  return (
+    <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", position: "relative", overflow: "hidden" }}>
+
+      {/* Chart fills available space */}
+      <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
+        <CandleChart
+          candles={candles} future={future} visibleFuture={visibleFuture}
+          indicators={indicators} tradeLines={tradeLines}
+          phase={phase} entryPrice={entryPrice}
+          drawings={drawings}
+          activeTool={phase === "setup" ? activeTool : null}
+          clearSignal={clearSignal}
+          onDrawingAdd={onDrawingAdd}
+          onSetSl={onSetSl} onSetTp={onSetTp}
+          T={T} previewPrice={previewPrice}
+          onPreviewPrice={onPreviewPrice}
+        />
+
+        {/* LIVE badge */}
+        {phase === "playing" && (
+          <div style={{ position: "absolute", top: 10, left: 10, background: T.greenDim, border: `1px solid ${T.greenBdrHi}`, borderRadius: 6, padding: "5px 12px", fontSize: 10, color: T.green, letterSpacing: 2, animation: "pulse 1s infinite" }}>{L.liveLabel}</div>
+        )}
+
+        {/* Score overlay */}
+        {phase === "done" && scoreData && (
+          <ScorePanel scoreData={scoreData} onReset={onReset} T={T} L={L} />
+        )}
+
+        {/* Active tool hint */}
+        {activeTool && phase === "setup" && (
+          <div style={{ position: "absolute", bottom: 70, left: "50%", transform: "translateX(-50%)", background: "rgba(56,189,248,0.1)", border: "1px solid rgba(56,189,248,0.25)", borderRadius: 6, padding: "5px 14px", fontSize: 10, color: "#38bdf8", letterSpacing: 1, pointerEvents: "none", whiteSpace: "nowrap" }}>
+            {activeTool === "set-sl" && L.hintSetSl}
+            {activeTool === "set-tp" && L.hintSetTp}
+            {activeTool === "hline" && L.hintHline}
+            {activeTool === "trendline" && L.hintTrend}
+          </div>
+        )}
+
+        {/* Tools toggle button */}
+        {phase === "setup" && (
+          <button onClick={() => setShowTools(v => !v)} style={{
+            position: "absolute", top: 10, right: 10,
+            width: 36, height: 36, borderRadius: 8,
+            background: showTools ? T.greenDim : T.surfaceMed,
+            border: `1px solid ${showTools ? T.greenBdr : T.borderMed}`,
+            color: showTools ? T.green : T.textMuted,
+            fontSize: 16, cursor: "pointer", display: "flex",
+            alignItems: "center", justifyContent: "center",
+          }}>✏</button>
+        )}
+
+        {/* Tools strip */}
+        {showTools && phase === "setup" && (
+          <div style={{
+            position: "absolute", top: 54, right: 10,
+            background: T.tooltipBg, border: `1px solid ${T.borderMed}`,
+            borderRadius: 10, padding: 6, display: "flex",
+            flexDirection: "column", gap: 4,
+            boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
+            animation: "fadeIn 0.15s ease",
+          }}>
+            {MOBILE_TOOLS.map(tool => {
+              const isActive = tool.isMa ? indicators[tool.id] : activeTool === tool.id;
+              const color = tool.id === "set-sl" ? "#ff5050" : tool.id === "set-tp" ? T.green : T.textMuted;
+              return (
+                <button key={tool.id} onClick={() => {
+                  if (tool.id === "trash") {
+                    onDrawingAdd && setActiveTool(null);
+                    // trigger clear via parent
+                    document.dispatchEvent(new CustomEvent("chartle-clear"));
+                    setShowTools(false);
+                  } else if (tool.isMa) {
+                    setIndicators(prev => ({ ...prev, [tool.id]: !prev[tool.id] }));
+                  } else {
+                    setActiveTool(activeTool === tool.id ? null : tool.id);
+                    setShowTools(false);
+                  }
+                }} style={{
+                  width: 36, height: 36, borderRadius: 6, border: `1px solid ${isActive ? color + "60" : T.borderFaint}`,
+                  background: isActive ? color + "20" : "transparent",
+                  color: isActive ? color : T.textMuted, fontSize: tool.id === "trash" ? 14 : 11,
+                  fontWeight: 700, cursor: "pointer",
+                  fontFamily: "'JetBrains Mono', monospace",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}>{tool.icon}</button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Bottom sheet trade controls */}
+      <div style={{ position: "relative", flexShrink: 0, height: 60 }}>
+        <MobileTradeSheet
+          T={T} L={L} phase={phase} entryPrice={entryPrice}
+          direction={direction} setDirection={setDirection}
+          sl={sl} setSl={setSl} tp={tp} setTp={setTp}
+          onTrade={onTrade} onReset={onReset}
+          scoreData={scoreData} previewPrice={previewPrice} error={error}
+        />
+      </div>
+    </div>
+  );
+}
+
 // ── Main App ──────────────────────────────────────────────────────────────────
 function ChartGame() {
   const seed = getDailySeed();
@@ -2025,6 +2364,7 @@ function ChartGame() {
   const [isDark, setIsDark] = useState(true);
   const [lang, setLang] = useState("en");
   const L = LANG[lang];
+  const isMobile = useIsMobile();
 
   // ── Load daily chart on mount ─────────────────────────────────────────────
   useEffect(() => {
@@ -2279,33 +2619,41 @@ function ChartGame() {
         input[type=number] { -moz-appearance: textfield; }
         @keyframes fadeIn { from { opacity:0; transform:scale(0.95);} to {opacity:1;transform:scale(1);} }
         @keyframes pulse { 0%,100%{opacity:1;}50%{opacity:0.5;} }
+        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
         body { font-weight: ${isDark ? 400 : 600}; }
+        /* Mobile: prevent iOS bounce/zoom */
+        @media (max-width: 768px) {
+          html, body { position: fixed; width: 100%; overflow: hidden; }
+          input, button { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+        }
         button:hover .tool-tip { opacity: 1 !important; }
         div:hover > div.tool-tip { opacity: 1 !important; }
       `}</style>
 
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 24px", borderBottom: `1px solid ${T.borderFaint}`, background: T.surface }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 10, cursor: "pointer" }} onClick={() => setPage("game")}>
-            <span style={{ fontSize: 20, fontWeight: 900, fontFamily: "'Space Grotesk', sans-serif", letterSpacing: -1 }}>TRA<span style={{ color: T.green }}>DLE</span></span>
-            <span style={{ fontSize: 10, color: T.textMuted, letterSpacing: 2 }}>{L.dailyTrade}</span>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: isMobile ? "10px 14px" : "14px 24px", borderBottom: `1px solid ${T.borderFaint}`, background: T.surface, flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 10 : 24 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 6, cursor: "pointer" }} onClick={() => setPage("game")}>
+            <span style={{ fontSize: isMobile ? 17 : 20, fontWeight: 900, fontFamily: "'Space Grotesk', sans-serif", letterSpacing: -1 }}>CHAR<span style={{ color: T.green }}>TLE</span></span>
+            {!isMobile && <span style={{ fontSize: 10, color: T.textMuted, letterSpacing: 2 }}>{L.dailyTrade}</span>}
           </div>
-          <div style={{ display: "flex", gap: 4 }}>
-            {[["game",L.navTrade],["journal",L.navJournal],["consensus",L.navConsensus]].map(([p, label]) => (
-              <button key={p} onClick={() => setPage(p)} style={{
-                padding: "5px 14px", borderRadius: 5, fontSize: 11, cursor: "pointer", letterSpacing: 1,
-                border: `1px solid ${page === p ? T.borderStr : T.borderFaint}`,
-                background: page === p ? T.surfaceHov : "transparent",
-                color: page === p ? T.text : T.textSub,
-                fontFamily: "'JetBrains Mono', monospace", transition: "all 0.15s",
-              }}>{label}</button>
-            ))}
-          </div>
+          {!isMobile && (
+            <div style={{ display: "flex", gap: 4 }}>
+              {[["game",L.navTrade],["journal",L.navJournal],["consensus",L.navConsensus]].map(([p, label]) => (
+                <button key={p} onClick={() => setPage(p)} style={{
+                  padding: "5px 14px", borderRadius: 5, fontSize: 11, cursor: "pointer", letterSpacing: 1,
+                  border: `1px solid ${page === p ? T.borderStr : T.borderFaint}`,
+                  background: page === p ? T.surfaceHov : "transparent",
+                  color: page === p ? T.text : T.textSub,
+                  fontFamily: "'JetBrains Mono', monospace", transition: "all 0.15s",
+                }}>{label}</button>
+              ))}
+            </div>
+          )}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ fontSize: 22, fontWeight: 900, fontFamily: "'Space Grotesk', sans-serif", letterSpacing: -0.5, color: T.text }}>{asset}</div>
-          <div style={{ padding: "4px 10px", borderRadius: 6, background: T.greenDim, border: `1px solid ${T.greenBdr}`, fontSize: 13, fontWeight: 700, color: T.green, fontFamily: "'Space Grotesk', sans-serif", letterSpacing: 1 }}>{tf}</div>
+          <div style={{ fontSize: isMobile ? 14 : 22, fontWeight: 900, fontFamily: "'Space Grotesk', sans-serif", letterSpacing: -0.5, color: T.text }}>{asset}</div>
+          <div style={{ padding: isMobile ? "3px 7px" : "4px 10px", borderRadius: 6, background: T.greenDim, border: `1px solid ${T.greenBdr}`, fontSize: isMobile ? 10 : 13, fontWeight: 700, color: T.green, fontFamily: "'Space Grotesk', sans-serif", letterSpacing: 1 }}>{tf}</div>
           <button
             onClick={() => setIsDark(d => !d)}
             title={isDark ? "Switch to light mode" : "Switch to dark mode"}
@@ -2339,8 +2687,8 @@ function ChartGame() {
         </div>
       </div>
 
-      {/* Practice bar — shown below header when on game page */}
-      {page === "game" && (
+      {/* Practice bar — desktop only */}
+      {page === "game" && !isMobile && (
         <div style={{
           display: "flex", alignItems: "center", justifyContent: "space-between",
           padding: "6px 24px",
@@ -2389,8 +2737,34 @@ function ChartGame() {
       {page === "journal" && <JournalPage seed={seed} scoreData={scoreData} direction={direction} sl={sl} tp={tp} entryPrice={entryPrice} asset={asset} tf={tf} T={T} L={L} user={user} onLogin={() => setShowAuth(true)} />}
       {page === "consensus" && <ConsensusPage seed={seed} scoreData={scoreData} direction={direction} sl={parseFloat(sl)||null} tp={parseFloat(tp)||null} entryPrice={entryPrice} T={T} L={L} user={user} />}
 
-      {/* Chart area */}
-      <div style={{ flex: 1, minHeight: 0, display: page === "game" ? "flex" : "none", flexDirection: "column", padding: "12px 16px 0 16px", gap: 10, overflow: "hidden" }}>
+      {/* Chart area — mobile vs desktop */}
+      <div style={{ flex: 1, minHeight: 0, display: page === "game" ? "flex" : "none", flexDirection: "column", padding: isMobile ? 0 : "12px 16px 0 16px", gap: isMobile ? 0 : 10, overflow: "hidden" }}>
+
+        {isMobile ? (
+          /* ── MOBILE layout ── */
+          <MobileGamePage
+            T={T} L={L} phase={phase}
+            candles={candles} future={future} visibleFuture={visibleFuture}
+            indicators={indicators} setIndicators={setIndicators}
+            tradeLines={tradeLines} entryPrice={entryPrice}
+            drawings={drawings} activeTool={activeTool} setActiveTool={setActiveTool}
+            clearSignal={clearSignal}
+            onDrawingAdd={(d) => setDrawings(prev => [...prev, d])}
+            onSetSl={(p) => { setSl(p.toFixed(2)); setPreviewPrice(null); setActiveTool(null); const tpNum = parseFloat(tp); if (!isNaN(tpNum)) setDirection(tpNum > p ? "long" : "short"); }}
+            onSetTp={(p) => { setTp(p.toFixed(2)); setPreviewPrice(null); setActiveTool(null); const slNum = parseFloat(sl); if (!isNaN(slNum)) setDirection(p > slNum ? "long" : "short"); }}
+            onPreviewPrice={setPreviewPrice}
+            previewPrice={previewPrice}
+            direction={direction} setDirection={setDirection}
+            sl={sl} setSl={setSl} tp={tp} setTp={setTp}
+            onTrade={handleTrade} onReset={handleReset}
+            scoreData={scoreData} error={error}
+            isPractice={isPractice} chartError={chartError}
+            user={user} practiceUsed={practiceUsed}
+            loadPracticeChart={loadPracticeChart}
+          />
+        ) : (
+          /* ── DESKTOP layout ── */
+          <>
         <div style={{ flex: 1, minHeight: 0, display: "flex", gap: 10, alignItems: "stretch" }}>
 
           {/* Drawing tray */}
@@ -2441,8 +2815,6 @@ function ChartGame() {
               T={T}
               previewPrice={previewPrice}
               onPreviewPrice={(preview) => {
-                // Always update preview price so R:R ratio recalculates while
-                // placing either SL or TP, even if the other line is already set.
                 setPreviewPrice(preview);
               }}
             />
@@ -2649,7 +3021,42 @@ function ChartGame() {
           ))}
         </div>{/* end instruction box */}
         </div>{/* end sticky bottom panel */}
+          </>
+        )}{/* end desktop/mobile conditional */}
       </div>{/* end game page */}
+
+      {/* ── Mobile bottom navigation ── */}
+      {isMobile && (
+        <div style={{
+          display: "flex", flexShrink: 0,
+          borderTop: `1px solid ${T.borderFaint}`,
+          background: T.pageBg,
+        }}>
+          {[["game","📈",L.navTrade],["journal","📓",L.navJournal],["consensus","👥",L.navConsensus]].map(([p, icon, label]) => (
+            <button key={p} onClick={() => setPage(p)} style={{
+              flex: 1, padding: "10px 0 8px", background: "none", border: "none",
+              cursor: "pointer", display: "flex", flexDirection: "column",
+              alignItems: "center", gap: 3,
+              borderTop: `2px solid ${page === p ? T.green : "transparent"}`,
+            }}>
+              <span style={{ fontSize: 18 }}>{icon}</span>
+              <span style={{ fontSize: 9, letterSpacing: 1, color: page === p ? T.green : T.textDim, fontFamily: "'JetBrains Mono', monospace", fontWeight: 700 }}>{label}</span>
+            </button>
+          ))}
+          <button onClick={loadPracticeChart} disabled={phase === "playing"} style={{
+            flex: 1, padding: "10px 0 8px", background: "none", border: "none",
+            cursor: phase === "playing" ? "not-allowed" : "pointer",
+            display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
+            borderTop: "2px solid transparent",
+            opacity: phase === "playing" ? 0.4 : 1,
+          }}>
+            <span style={{ fontSize: 18 }}>🔀</span>
+            <span style={{ fontSize: 9, letterSpacing: 1, color: T.textDim, fontFamily: "'JetBrains Mono', monospace", fontWeight: 700 }}>
+              {isPractice ? L.practiceLabel : "NEW"}
+            </span>
+          </button>
+        </div>
+      )}
       {/* ── Modals ── */}
       {showAuth && (
         <AuthModal T={T} L={L}
