@@ -62,7 +62,7 @@ const FOREX = [
 
 // Timeframes — Alpha Vantage interval strings
 // 15min, 60min, and daily (used as "4H equivalent" with 4-bar grouping)
-const TIMEFRAMES = ["15min", "60min", "daily"];
+const TIMEFRAMES = ["daily"];
 const TF_LABELS  = { "15min": "15M", "60min": "1H", "daily": "1D" };
 
 // ── Alpha Vantage fetch helpers ───────────────────────────────────────────────
@@ -250,8 +250,7 @@ function randomAsset() {
     return { type: "crypto", ...pair, tf: "daily" };
   } else {
     const pair = FOREX[Math.floor(Math.random() * FOREX.length)];
-    const tf   = TIMEFRAMES[Math.floor(Math.random() * TIMEFRAMES.length)];
-    return { type: "forex", ...pair, tf };
+    return { type: "forex", ...pair, tf: "daily" };
   }
 }
 
