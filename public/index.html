@@ -1452,7 +1452,7 @@ function AuthModal({ T, L, onSuccess, onClose }) {
       }}>
         <div style={{ marginBottom: 24 }}>
           <div style={{ fontSize: 20, fontWeight: 900, fontFamily: "'Space Grotesk', sans-serif", letterSpacing: -1, color: T.text }}>
-            TRA<span style={{ color: T.green }}>DLE</span>
+            CHAR<span style={{ color: T.green }}>TLE</span>
           </div>
           <div style={{ fontSize: 11, color: T.textMuted, letterSpacing: 2, marginTop: 4 }}>
             {mode === "login" ? L.signIn : mode === "signup" ? L.createAccount : L.resetPassword}
@@ -2208,7 +2208,7 @@ function MobileGamePage({
   onDrawingAdd, onSetSl, onSetTp, onPreviewPrice, previewPrice,
   direction, setDirection, sl, setSl, tp, setTp,
   onTrade, onReset, scoreData, error, isPractice, chartError,
-  user, practiceUsed, loadPracticeChart,
+  user, practiceUsed, loadPracticeChart, onClear,
 }) {
   const [showTools, setShowTools] = React.useState(false);
 
@@ -2290,9 +2290,8 @@ function MobileGamePage({
               return (
                 <button key={tool.id} onClick={() => {
                   if (tool.id === "trash") {
-                    onDrawingAdd && setActiveTool(null);
-                    // trigger clear via parent
-                    document.dispatchEvent(new CustomEvent("chartle-clear"));
+                    if (onClear) onClear();
+                    setActiveTool(null);
                     setShowTools(false);
                   } else if (tool.isMa) {
                     setIndicators(prev => ({ ...prev, [tool.id]: !prev[tool.id] }));
@@ -2738,7 +2737,7 @@ function ChartGame() {
       {page === "consensus" && <ConsensusPage seed={seed} scoreData={scoreData} direction={direction} sl={parseFloat(sl)||null} tp={parseFloat(tp)||null} entryPrice={entryPrice} T={T} L={L} user={user} />}
 
       {/* Chart area — mobile vs desktop */}
-      <div style={{ flex: 1, minHeight: 0, display: page === "game" ? "flex" : "none", flexDirection: "column", padding: isMobile ? 0 : "12px 16px 0 16px", gap: isMobile ? 0 : 10, overflow: "hidden" }}>
+      <div style={{ flex: 1, minHeight: 0, display: page === "game" ? "flex" : "none", flexDirection: "column", padding: isMobile ? "0" : "12px 16px 0 16px", gap: isMobile ? 0 : 10, overflow: "hidden" }}>
 
         {isMobile ? (
           /* ── MOBILE layout ── */
@@ -2761,6 +2760,15 @@ function ChartGame() {
             isPractice={isPractice} chartError={chartError}
             user={user} practiceUsed={practiceUsed}
             loadPracticeChart={loadPracticeChart}
+            onClear={() => {
+              setDrawings([]);
+              setSl("");
+              setTp("");
+              setDirection(null);
+              setPreviewPrice(null);
+              setActiveTool(null);
+              setClearSignal(sig => sig + 1);
+            }}
           />
         ) : (
           /* ── DESKTOP layout ── */
