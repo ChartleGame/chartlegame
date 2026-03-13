@@ -2,8 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <!-- CHARTLE v3.0 MOBILE -->
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Tradle</title>
+  <title>Chartle</title>
   <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -88,6 +92,19 @@
     };
   </script>
 
+  <script>
+    // Runs before Babel — mobile detection available immediately
+    if (window.innerWidth < 768) {
+      document.documentElement.classList.add('is-mobile');
+    }
+    window.addEventListener('resize', function() {
+      if (window.innerWidth < 768) {
+        document.documentElement.classList.add('is-mobile');
+      } else {
+        document.documentElement.classList.remove('is-mobile');
+      }
+    });
+  </script>
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
@@ -1992,9 +2009,16 @@ const LANG = {
 
 // ── Mobile detection hook ──────────────────────────────────────────────────────
 function useIsMobile() {
-  const [isMobile, setIsMobile] = React.useState(() => window.innerWidth < 768);
+  const [isMobile, setIsMobile] = React.useState(() => {
+    const mobile = window.innerWidth < 768;
+    console.log("[Chartle] useIsMobile init:", mobile, "width:", window.innerWidth);
+    return mobile;
+  });
   React.useEffect(() => {
-    const handler = () => setIsMobile(window.innerWidth < 768);
+    const handler = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+    };
     window.addEventListener("resize", handler);
     return () => window.removeEventListener("resize", handler);
   }, []);
@@ -2629,6 +2653,10 @@ function ChartGame() {
         div:hover > div.tool-tip { opacity: 1 !important; }
       `}</style>
 
+      {/* Temp debug - auto-hides */}
+      <div id="debugBanner" style={{background: isMobile ? '#00aa44' : '#aa4400', color:'#fff', padding:'3px 8px', fontSize:10, fontFamily:'monospace', flexShrink:0, textAlign:'center'}}>
+        CHARTLE v3 · isMobile={String(isMobile)} · w={String(typeof window !== 'undefined' ? Math.round(window.innerWidth) : 0)}
+      </div>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: isMobile ? "10px 14px" : "14px 24px", borderBottom: `1px solid ${T.borderFaint}`, background: T.surface, flexShrink: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 10 : 24 }}>
