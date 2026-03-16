@@ -1,5 +1,4 @@
 "use strict";
-require("dotenv").config();
 
 const express    = require("express");
 const cors       = require("cors");
@@ -9,7 +8,7 @@ const { v4: uuid } = require("uuid");
 const fs         = require("fs");
 const path       = require("path");
 const stripe     = require("stripe")(process.env.STRIPE_SECRET_KEY);
-const { Resend } = require("resend"); 
+const { Resend } = require("resend");
 
 const app    = express();
 const resend = new Resend(process.env.RESEND_API_KEY);
@@ -209,12 +208,8 @@ app.post("/api/auth/signup", async (req, res) => {
   if (!email || !password || !username) {
     return res.status(400).json({ error: "Email, username and password are required" });
   }
-  const pwErrors = [];
-  if (password.length < 8)            pwErrors.push("at least 8 characters");
-  if (!/[A-Z]/.test(password))        pwErrors.push("one uppercase letter");
-  if (!/[^A-Za-z0-9]/.test(password)) pwErrors.push("one special character");
-  if (pwErrors.length > 0) {
-    return res.status(400).json({ error: "Password must contain: " + pwErrors.join(", ") });
+  if (password.length < 8) {
+    return res.status(400).json({ error: "Password must be at least 8 characters" });
   }
 
   const users = getUsers();
@@ -244,7 +239,7 @@ app.post("/api/auth/signup", async (req, res) => {
   // Send verification email
   try {
     await resend.emails.send({
-      from: process.env.EMAIL_FROM || "noreply@tradle.app",
+      from: process.env.EMAIL_FROM || "noreply@chartle.app",
       to: email,
       subject: "Verify your Chartle account",
       html: `
@@ -256,7 +251,7 @@ app.post("/api/auth/signup", async (req, res) => {
              style="display:inline-block;margin:20px 0;padding:12px 24px;background:#00a65a;color:#fff;text-decoration:none;border-radius:6px;font-weight:700;letter-spacing:1px;">
             VERIFY EMAIL
           </a>
-          <p style="color:#666;font-size:12px;">If you didn't create a Tradle account, ignore this email.</p>
+          <p style="color:#666;font-size:12px;">If you didn't create a Chartle account, ignore this email.</p>
         </div>
       `,
     });
@@ -322,7 +317,7 @@ app.get("/api/auth/verify", (req, res) => {
   if (!user) {
     return res.send(`<html><body style="font-family:monospace;text-align:center;padding:60px">
       <h2 style="color:#e03535">Invalid or expired verification link.</h2>
-      <a href="${process.env.FRONTEND_URL || "/"}">← Back to Tradle</a>
+      <a href="${process.env.FRONTEND_URL || "/"}">← Back to Chartle</a>
     </body></html>`);
   }
 
@@ -332,8 +327,8 @@ app.get("/api/auth/verify", (req, res) => {
 
   res.send(`<html><body style="font-family:monospace;text-align:center;padding:60px">
     <h2 style="color:#00a65a">✓ Email verified!</h2>
-    <p>Your Tradle account is now active.</p>
-    <a href="${process.env.FRONTEND_URL || "/"}" style="color:#00a65a">← Play Tradle</a>
+    <p>Your Chartle account is now active.</p>
+    <a href="${process.env.FRONTEND_URL || "/"}" style="color:#00a65a">← Play Chartle</a>
   </body></html>`);
 });
 
@@ -357,7 +352,7 @@ app.post("/api/auth/forgot-password", async (req, res) => {
 
   try {
     await resend.emails.send({
-      from: process.env.EMAIL_FROM || "noreply@tradle.app",
+      from: process.env.EMAIL_FROM || "noreply@chartle.app",
       to: user.email,
       subject: "Reset your Chartle password",
       html: `
@@ -605,47 +600,6 @@ async function handleStripeWebhook(req, res) {
   res.json({ received: true });
 }
 
-
-// ─────────────────────────────────────────────────────────────────────────────
-// JOURNAL ENDPOINTS — server-side per-user storage
-// ─────────────────────────────────────────────────────────────────────────────
-
-function getJournalFile(userId) {
-  return path.join(DATA_DIR, "journals", `${userId}.json`);
-}
-function getUserJournal(userId) {
-  const f = getJournalFile(userId);
-  if (!fs.existsSync(f)) return {};
-  try { return JSON.parse(fs.readFileSync(f, "utf8")); } catch { return {}; }
-}
-function saveUserJournal(userId, data) {
-  const dir = path.join(DATA_DIR, "journals");
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(getJournalFile(userId), JSON.stringify(data), "utf8");
-}
-
-// GET /api/journal — get all entries for logged-in user
-app.get("/api/journal", requireAuth, (req, res) => {
-  const journal = getUserJournal(req.user.id);
-  res.json(journal);
-});
-
-// POST /api/journal/:key — save a single entry
-app.post("/api/journal/:key", requireAuth, (req, res) => {
-  const journal = getUserJournal(req.user.id);
-  journal[req.params.key] = req.body;
-  saveUserJournal(req.user.id, journal);
-  res.json({ ok: true });
-});
-
-// DELETE /api/journal/:key — delete a single entry
-app.delete("/api/journal/:key", requireAuth, (req, res) => {
-  const journal = getUserJournal(req.user.id);
-  delete journal[req.params.key];
-  saveUserJournal(req.user.id, journal);
-  res.json({ ok: true });
-});
-
 // ─────────────────────────────────────────────────────────────────────────────
 // CRON — run within the same process (also available standalone via cron.js)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -680,7 +634,7 @@ cron.schedule("0 * * * *", async () => {
 // ─────────────────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`\n🟢 Tradle server running on port ${PORT}`);
+  console.log(`\n🟢 Chartle server running on port ${PORT}`);
   console.log(`   Frontend: http://localhost:${PORT}`);
   console.log(`   API:      http://localhost:${PORT}/api\n`);
 

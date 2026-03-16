@@ -2,10 +2,6 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <!-- CHARTLE v3.0 MOBILE -->
-  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-  <meta http-equiv="Pragma" content="no-cache">
-  <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Chartle</title>
   <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
@@ -54,14 +50,22 @@
     // ── API config ─────────────────────────────────────────────────────────────
     window.API_BASE = "";  // same origin — change to "https://yourdomain.com" in production
 
+    // ── Migrate old localStorage keys (tradle → chartle) ─────────────────────
+    if (localStorage.getItem("tradle_token") && !localStorage.getItem("chartle_token")) {
+      localStorage.setItem("chartle_token", localStorage.getItem("tradle_token"));
+      localStorage.setItem("chartle_user", localStorage.getItem("tradle_user"));
+      localStorage.removeItem("tradle_token");
+      localStorage.removeItem("tradle_user");
+    }
+
     // ── Auth token storage ─────────────────────────────────────────────────────
     window.auth = {
-      getToken:  () => localStorage.getItem("tradle_token"),
-      setToken:  (t) => { if (t) localStorage.setItem("tradle_token", t); else localStorage.removeItem("tradle_token"); },
-      getUser:   () => { try { return JSON.parse(localStorage.getItem("tradle_user") || "null"); } catch { return null; } },
-      setUser:   (u) => { if (u) localStorage.setItem("tradle_user", JSON.stringify(u)); else localStorage.removeItem("tradle_user"); },
-      clear:     () => { localStorage.removeItem("tradle_token"); localStorage.removeItem("tradle_user"); },
-      isLoggedIn:() => !!localStorage.getItem("tradle_token"),
+      getToken:  () => localStorage.getItem("chartle_token"),
+      setToken:  (t) => { if (t) localStorage.setItem("chartle_token", t); else localStorage.removeItem("chartle_token"); },
+      getUser:   () => { try { return JSON.parse(localStorage.getItem("chartle_user") || "null"); } catch { return null; } },
+      setUser:   (u) => { if (u) localStorage.setItem("chartle_user", JSON.stringify(u)); else localStorage.removeItem("chartle_user"); },
+      clear:     () => { localStorage.removeItem("chartle_token"); localStorage.removeItem("chartle_user"); },
+      isLoggedIn:() => !!localStorage.getItem("chartle_token"),
       isPaid:    () => { const u = window.auth.getUser(); return u?.subscription?.status === "active"; },
     };
 
@@ -80,11 +84,11 @@
     window.practiceUsage = {
       todayKey: () => new Date().toISOString().slice(0, 10),
       getCount: () => {
-        const key = "tradle_practice_" + window.practiceUsage.todayKey();
+        const key = "chartle_practice_" + window.practiceUsage.todayKey();
         return parseInt(localStorage.getItem(key) || "0");
       },
       increment: () => {
-        const key = "tradle_practice_" + window.practiceUsage.todayKey();
+        const key = "chartle_practice_" + window.practiceUsage.todayKey();
         const n = window.practiceUsage.getCount() + 1;
         localStorage.setItem(key, String(n));
         return n;
@@ -92,19 +96,6 @@
     };
   </script>
 
-  <script>
-    // Runs before Babel — mobile detection available immediately
-    if (window.innerWidth < 768) {
-      document.documentElement.classList.add('is-mobile');
-    }
-    window.addEventListener('resize', function() {
-      if (window.innerWidth < 768) {
-        document.documentElement.classList.add('is-mobile');
-      } else {
-        document.documentElement.classList.remove('is-mobile');
-      }
-    });
-  </script>
   <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
@@ -655,7 +646,7 @@ function ScorePanel({ scoreData, onReset, T, L }) {
   const { score, result, pnlPct, rrRatio, correctDirection, directionScore, outcomeScore, rrScore } = scoreData;
   const grade = score >= 85 ? "S" : score >= 70 ? "A" : score >= 55 ? "B" : score >= 40 ? "C" : "D";
   const gradeColor = { S: "#ffd700", A: T.green, B: "#60a5fa", C: "#f59e0b", D: "#ff5050" }[grade];
-  const resultLabel = result === "tp" ? "🎯 Take Profit Hit!" : result === "sl" ? "🛑 Stop Loss Hit" : "⏱ Timed Out";
+  const resultLabel = result === "tp" ? L.resultTp : result === "sl" ? L.resultSl : L.resultTimeout;
   const [minimised, setMinimised] = useState(false);
 
   if (minimised) {
@@ -671,7 +662,7 @@ function ScorePanel({ scoreData, onReset, T, L }) {
         <span style={{ fontSize: 20, fontWeight: 900, color: gradeColor, fontFamily: "'Space Grotesk', sans-serif", lineHeight: 1 }}>{grade}</span>
         <span style={{ fontSize: 13, fontWeight: 700, color: T.text, fontFamily: "'Space Grotesk', sans-serif" }}>{score}<span style={{ fontSize: 10, color: T.textSub }}>/100</span></span>
         <span style={{ fontSize: 10, color: gradeColor }}>{resultLabel}</span>
-        <span style={{ fontSize: 10, color: T.textSub, marginLeft: 4 }}>▲ show results</span>
+        <span style={{ fontSize: 10, color: T.textSub, marginLeft: 4 }}>{L.showResults}</span>
       </div>
     );
   }
@@ -688,7 +679,7 @@ function ScorePanel({ scoreData, onReset, T, L }) {
         {/* Header row with minimise button */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
           <div style={{ fontSize: 11, letterSpacing: 4, color: T.textSub, fontFamily: "'JetBrains Mono', monospace" }}>{L.todaysResult}</div>
-          <button onClick={() => setMinimised(true)} title="See chart" style={{
+          <button onClick={() => setMinimised(true)} title={L.seeChart} style={{
             background: T.surfaceMed, border: `1px solid ${T.borderMed}`,
             color: T.textHalf, borderRadius: 6, padding: "4px 10px",
             cursor: "pointer", fontSize: 10, letterSpacing: 1, fontFamily: "'JetBrains Mono', monospace",
@@ -1008,13 +999,7 @@ function JournalPage({ seed, scoreData, direction, sl, tp, entryPrice, asset, tf
       savedAt: Date.now(),
     };
     try {
-      if (window.auth.isLoggedIn()) {
-        await window.apiFetch(`/api/journal/${storageKey}`, {
-          method: "POST", body: JSON.stringify(entry),
-        });
-      } else {
-        await window.storage.set(storageKey, JSON.stringify(entry));
-      }
+      await window.storage.set(storageKey, JSON.stringify(entry));
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
       setRealEntries(prev => [entry, ...prev.filter(e => e.seed !== seed)]);
@@ -1451,7 +1436,7 @@ function AuthModal({ T, L, onSuccess, onClose }) {
       window.auth.setUser(data.user);
       onSuccess(data.user);
     } catch(e) {
-      setError(e.message || "Something went wrong");
+      setError(e.message || L.somethingWrong);
     }
     setLoading(false);
   };
@@ -1478,13 +1463,13 @@ function AuthModal({ T, L, onSuccess, onClose }) {
 
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {mode === "signup" && (
-            <input style={inp} placeholder="Username" value={username}
+            <input style={inp} placeholder={L.usernamePlaceholder} value={username}
               onChange={e => setUsername(e.target.value)} />
           )}
-          <input style={inp} placeholder="Email" type="email" value={email}
+          <input style={inp} placeholder={L.emailPlaceholder} type="email" value={email}
             onChange={e => setEmail(e.target.value)} />
           {mode !== "forgot" && (
-            <input style={inp} placeholder="Password (min 8 chars)" type="password" value={password}
+            <input style={inp} placeholder={L.passwordPlaceholder} type="password" value={password}
               onChange={e => setPassword(e.target.value)}
               onKeyDown={e => e.key === "Enter" && submit()} />
           )}
@@ -1519,7 +1504,7 @@ function AuthModal({ T, L, onSuccess, onClose }) {
 }
 
 // ── Account Dropdown ────────────────────────────────────────────────────────────
-function AccountButton({ T, user, onLogin, onLogout, onManage }) {
+function AccountButton({ T, L, user, onLogin, onLogout, onManage }) {
   const [open, setOpen] = React.useState(false);
   const ref = React.useRef();
 
@@ -1661,12 +1646,12 @@ function PaywallModal({ T, L, user, onClose, onUpgrade, reason }) {
           letterSpacing: 2, cursor: "pointer", fontFamily: "'JetBrains Mono', monospace",
           boxShadow: T.greenGlow,
         }}>
-          {L.upgradeBtn}
+          UPGRADE TO PRO →
         </button>
         <button onClick={onClose} style={{
           marginTop: 12, background: "none", border: "none", color: T.textDim,
           fontSize: 11, cursor: "pointer",
-        }}>{L.maybeLater}</button>
+        }}>Maybe later</button>
       </div>
     </div>
   );
@@ -1706,7 +1691,7 @@ function AccountSettingsModal({ T, L, user, onClose, onUserUpdate }) {
   };
 
   const deleteAccount = async () => {
-    if (!window.confirm("Delete your account? This cannot be undone.")) return;
+    if (!window.confirm(L.deleteWarning)) return;
     setLoading(true);
     try {
       await window.apiFetch("/api/user/me", { method: "DELETE", body: JSON.stringify({ password: deletePw }) });
@@ -1757,7 +1742,9 @@ function AccountSettingsModal({ T, L, user, onClose, onUserUpdate }) {
 
         {tab === "danger" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <div style={{ fontSize: 11, color: T.textMuted, lineHeight: 1.6, marginBottom: 6 }}>{L.deleteWarning}</div>
+            <div style={{ fontSize: 11, color: T.textMuted, lineHeight: 1.6, marginBottom: 6 }}>
+              {L.deleteWarning}
+            </div>
             <input style={inp} type="password" placeholder={L.confirmPassword} value={deletePw} onChange={e => setDeletePw(e.target.value)} />
             {msg.text && <div style={{ fontSize: 11, color: "#ff5050" }}>{msg.text}</div>}
             <button onClick={deleteAccount} disabled={loading} style={{
@@ -1844,6 +1831,13 @@ const LANG = {
     yourVsCommunity: "YOUR TRADE VS COMMUNITY",
     yourSl: "YOUR SL", yourTp: "YOUR TP", yourScore: "YOUR SCORE",
     avgLabel: (v) => `avg ${v}`, topLabel: (v) => `top ${v}`,
+    // Result labels
+    resultTp: "🎯 Take Profit Hit!", resultSl: "🛑 Stop Loss Hit", resultTimeout: "⏱ Timed Out",
+    // UI labels
+    showResults: "▲ show results", seeChart: "See chart",
+    switchLight: "Switch to light mode", switchDark: "Switch to dark mode",
+    loadingChart: "LOADING CHART...", somethingWrong: "Something went wrong",
+    practiceToday: "practice today",
     // Auth modal
     signIn: "SIGN IN", createAccount: "CREATE ACCOUNT", resetPassword: "RESET PASSWORD",
     sendResetLink: "SEND RESET LINK",
@@ -1852,17 +1846,14 @@ const LANG = {
     noAccount: "No account? CREATE ONE →", forgotPassword: "Forgot password?",
     backToSignIn: "← BACK TO SIGN IN",
     // Account button
-    signInBtn: "SIGN IN",
-    signOut: "Sign out",
+    signInBtn: "SIGN IN", signOut: "Sign out",
     upgradePro: "⭐ Upgrade to Pro — $3.99/mo",
     manageSubscription: "💳 Manage Subscription",
     accountSettings: "⚙ Account Settings",
     unverified: "⚠ UNVERIFIED",
     // Practice bar
-    dailyChartLabel: "DAILY CHART",
-    practiceLabel: "PRACTICE",
+    dailyChartLabel: "DAILY CHART", practiceLabel: "PRACTICE",
     offlineChart: "Using offline chart — server unavailable",
-    practiceToday: "practice today",
     newPracticeBtn: "NEW PRACTICE CHART →",
     // Paywall
     dailyLimitTitle: "Daily Limit Reached",
@@ -1870,20 +1861,16 @@ const LANG = {
     dailyLimitMsg: "Free accounts get 3 practice charts per day. Come back tomorrow, or upgrade for unlimited access.",
     practiceFeatureMsg: "Unlimited practice charts for serious traders.",
     unlimitedPractice: "Unlimited practice charts",
-    allAssets: "All assets & timeframes",
-    fullJournal: "Full journal & stats",
+    allAssets: "All assets and timeframes",
+    fullJournal: "Full journal and statistics",
     prioritySupport: "Priority support",
-    perMonth: "/month",
-    cancelAnytime: "USD · CAD · EUR · Cancel anytime",
-    upgradeBtn: "UPGRADE TO PRO →",
-    maybeLater: "Maybe later",
+    perMonth: "/mo", cancelAnytime: "USD · CAD · EUR · Cancel anytime",
+    upgradeBtn: "UPGRADE TO PRO →", maybeLater: "Maybe later",
     // Account settings
     accountSettingsTitle: "ACCOUNT SETTINGS",
     profileTab: "PROFILE", dangerTab: "DANGER ZONE",
-    usernameLabel: "USERNAME",
-    changePassword: "CHANGE PASSWORD",
-    currentPassword: "Current password",
-    newPassword: "New password",
+    usernameLabel: "USERNAME", changePassword: "CHANGE PASSWORD",
+    currentPassword: "Current password", newPassword: "New password",
     saveChanges: "SAVE CHANGES",
     deleteWarning: "Deleting your account is permanent. All your journal entries and stats will be lost.",
     confirmPassword: "Enter password to confirm",
@@ -1959,6 +1946,14 @@ const LANG = {
     yourVsCommunity: "VOTRE TRADE VS COMMUNAUTÉ",
     yourSl: "VOTRE SL", yourTp: "VOTRE TP", yourScore: "VOTRE SCORE",
     avgLabel: (v) => `moy. ${v}`, topLabel: (v) => `top ${v}`,
+    // Result labels
+    resultTp: "🎯 Take Profit atteint !", resultSl: "🛑 Stop Loss atteint", resultTimeout: "⏱ Temps écoulé",
+    // UI labels
+    showResults: "▲ voir les résultats", seeChart: "Voir le graphique",
+    switchLight: "Passer au mode clair", switchDark: "Passer au mode sombre",
+    loadingChart: "CHARGEMENT...", somethingWrong: "Une erreur est survenue",
+    globally: "globalement",
+    practiceToday: "pratique aujourd'hui",
     // Auth modal
     signIn: "SE CONNECTER", createAccount: "CRÉER UN COMPTE", resetPassword: "RÉINITIALISER",
     sendResetLink: "ENVOYER LE LIEN",
@@ -1967,389 +1962,37 @@ const LANG = {
     noAccount: "Pas de compte ? EN CRÉER UN →", forgotPassword: "Mot de passe oublié ?",
     backToSignIn: "← RETOUR À LA CONNEXION",
     // Account button
-    signInBtn: "CONNEXION",
-    signOut: "Se déconnecter",
+    signInBtn: "CONNEXION", signOut: "Se déconnecter",
     upgradePro: "⭐ Passer à Pro — 3,99 $/mois",
     manageSubscription: "💳 Gérer l'abonnement",
     accountSettings: "⚙ Paramètres du compte",
     unverified: "⚠ NON VÉRIFIÉ",
     // Practice bar
-    dailyChartLabel: "GRAPHIQUE DU JOUR",
-    practiceLabel: "PRATIQUE",
+    dailyChartLabel: "GRAPHIQUE DU JOUR", practiceLabel: "PRATIQUE",
     offlineChart: "Graphique hors ligne — serveur indisponible",
-    practiceToday: "pratique aujourd'hui",
     newPracticeBtn: "NOUVEAU GRAPHIQUE →",
     // Paywall
-    dailyLimitTitle: "Limite Quotidienne Atteinte",
-    practiceFeatureTitle: "Graphiques de Pratique — Fonctionnalité Pro",
+    dailyLimitTitle: "Limite quotidienne atteinte",
+    practiceFeatureTitle: "Graphiques de pratique — Fonctionnalité Pro",
     dailyLimitMsg: "Les comptes gratuits ont 3 graphiques de pratique par jour. Revenez demain ou passez à Pro.",
     practiceFeatureMsg: "Graphiques de pratique illimités pour les traders sérieux.",
     unlimitedPractice: "Graphiques de pratique illimités",
     allAssets: "Tous les actifs et unités de temps",
     fullJournal: "Journal et statistiques complets",
     prioritySupport: "Support prioritaire",
-    perMonth: "/mois",
-    cancelAnytime: "USD · CAD · EUR · Annulez à tout moment",
-    upgradeBtn: "PASSER À PRO →",
-    maybeLater: "Peut-être plus tard",
+    perMonth: "/mois", cancelAnytime: "USD · CAD · EUR · Annulez à tout moment",
+    upgradeBtn: "PASSER À PRO →", maybeLater: "Peut-être plus tard",
     // Account settings
     accountSettingsTitle: "PARAMÈTRES DU COMPTE",
     profileTab: "PROFIL", dangerTab: "ZONE DANGEREUSE",
-    usernameLabel: "NOM D'UTILISATEUR",
-    changePassword: "CHANGER LE MOT DE PASSE",
-    currentPassword: "Mot de passe actuel",
-    newPassword: "Nouveau mot de passe",
+    usernameLabel: "NOM D'UTILISATEUR", changePassword: "CHANGER LE MOT DE PASSE",
+    currentPassword: "Mot de passe actuel", newPassword: "Nouveau mot de passe",
     saveChanges: "SAUVEGARDER",
     deleteWarning: "La suppression de votre compte est permanente. Toutes vos entrées de journal seront perdues.",
     confirmPassword: "Entrez votre mot de passe pour confirmer",
     deleteAccount: "SUPPRIMER MON COMPTE",
   },
 };
-
-
-// ── Mobile detection hook ──────────────────────────────────────────────────────
-function useIsMobile() {
-  const [isMobile, setIsMobile] = React.useState(() => {
-    const mobile = window.innerWidth < 768;
-    console.log("[Chartle] useIsMobile init:", mobile, "width:", window.innerWidth);
-    return mobile;
-  });
-  React.useEffect(() => {
-    const handler = () => {
-      const mobile = window.innerWidth < 768;
-      setIsMobile(mobile);
-    };
-    window.addEventListener("resize", handler);
-    return () => window.removeEventListener("resize", handler);
-  }, []);
-  return isMobile;
-}
-
-// ── Mobile Trade Controls (bottom sheet) ──────────────────────────────────────
-function MobileTradeSheet({
-  T, L, phase, entryPrice, direction, setDirection,
-  sl, setSl, tp, setTp, onTrade, onReset, scoreData,
-  previewPrice, error,
-}) {
-  const [open, setOpen] = React.useState(false);
-
-  const previewSl  = previewPrice?.tool === "set-sl" ? previewPrice.price : null;
-  const previewTp  = previewPrice?.tool === "set-tp" ? previewPrice.price : null;
-  const displaySl  = previewSl !== null ? previewSl  : parseFloat(sl)  || null;
-  const displayTp  = previewTp !== null ? previewTp  : parseFloat(tp)  || null;
-  const displayDir = previewPrice
-    ? (displaySl !== null && displayTp !== null
-        ? (displayTp > displaySl ? "long" : "short")
-        : previewSl !== null ? (previewSl < entryPrice ? "long" : "short")
-        : previewTp !== null ? (previewTp > entryPrice ? "long" : "short")
-        : direction)
-    : direction;
-  const displayRR = displaySl !== null && displayTp !== null
-    ? Math.abs(displayTp - entryPrice) / Math.abs(displaySl - entryPrice)
-    : null;
-  const isPreviewing = previewPrice !== null;
-
-  const inpStyle = (color) => ({
-    width: "100%", padding: "12px 14px", borderRadius: 8,
-    background: color ? `${color}10` : T.surfaceMed,
-    border: `1px solid ${color ? `${color}40` : T.borderMed}`,
-    color: color || T.text, fontSize: 16, outline: "none",
-    fontFamily: "'JetBrains Mono', monospace",
-    WebkitAppearance: "none",
-  });
-
-  // Pill summary shown when sheet is closed
-  const pill = (
-    <div
-      onClick={() => phase === "setup" && setOpen(true)}
-      style={{
-        position: "absolute", bottom: 0, left: 0, right: 0,
-        background: T.pageBg,
-        borderTop: `1px solid ${T.borderMed}`,
-        padding: "10px 16px",
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        cursor: phase === "setup" ? "pointer" : "default",
-        zIndex: 10,
-      }}>
-      <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-        <div style={{ fontSize: 11, color: T.textMuted }}>{L.entryPrice}</div>
-        <div style={{ fontSize: 15, fontWeight: 700, color: T.text, fontFamily: "'Space Grotesk', sans-serif" }}>
-          {entryPrice.toFixed(2)}
-        </div>
-        {displayDir && (
-          <div style={{
-            fontSize: 10, fontWeight: 700, letterSpacing: 1,
-            padding: "3px 10px", borderRadius: 4,
-            color: displayDir === "long" ? T.green : "#ff5050",
-            background: displayDir === "long" ? T.greenDim : "rgba(255,80,80,0.1)",
-            border: `1px solid ${displayDir === "long" ? T.greenBdr : "rgba(255,80,80,0.3)"}`,
-          }}>
-            {displayDir === "long" ? L.long : L.short}
-          </div>
-        )}
-        {displayRR !== null && (
-          <div style={{ fontSize: 12, fontWeight: 700, color: "#60a5fa" }}>1:{displayRR.toFixed(2)}</div>
-        )}
-      </div>
-      {phase === "setup" ? (
-        <div style={{ fontSize: 11, color: T.green, letterSpacing: 1 }}>{L.execute} ↑</div>
-      ) : phase === "playing" ? (
-        <div style={{ fontSize: 11, color: T.green, letterSpacing: 2, animation: "pulse 1s infinite" }}>● {L.liveLabel}</div>
-      ) : null}
-    </div>
-  );
-
-  if (!open || phase !== "setup") return pill;
-
-  return (
-    <div style={{
-      position: "absolute", bottom: 0, left: 0, right: 0,
-      background: T.pageBg, borderTop: `2px solid ${T.borderMed}`,
-      borderRadius: "16px 16px 0 0",
-      padding: "0 16px 24px",
-      zIndex: 20,
-      maxHeight: "80vh", overflowY: "auto",
-      boxShadow: "0 -8px 32px rgba(0,0,0,0.4)",
-      animation: "slideUp 0.2s ease",
-    }}>
-      {/* Handle + header */}
-      <div style={{ display: "flex", justifyContent: "center", padding: "10px 0 6px" }}>
-        <div style={{ width: 36, height: 4, borderRadius: 2, background: T.borderMed }} />
-      </div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <div style={{ fontSize: 11, color: T.textMuted, letterSpacing: 2 }}>{L.entryPrice}: <span style={{ color: T.text, fontWeight: 700 }}>{entryPrice.toFixed(2)}</span></div>
-        <button onClick={() => setOpen(false)} style={{ background: "none", border: "none", color: T.textMuted, fontSize: 20, cursor: "pointer", padding: "0 4px" }}>↓</button>
-      </div>
-
-      {/* Direction */}
-      <div style={{ marginBottom: 14 }}>
-        <div style={{ fontSize: 9, color: T.textMuted, letterSpacing: 2, marginBottom: 8 }}>{L.direction}</div>
-        <div style={{ display: "flex", gap: 8 }}>
-          {[["long", L.long, T.green], ["short", L.short, "#ff5050"]].map(([d, label, color]) => (
-            <button key={d} onClick={() => setDirection(d)} style={{
-              flex: 1, padding: "14px 0", borderRadius: 8, fontSize: 14, fontWeight: 700,
-              cursor: "pointer", border: `2px solid ${displayDir === d ? color : T.border}`,
-              background: displayDir === d ? `${color}18` : "transparent",
-              color: displayDir === d ? color : T.textMuted, letterSpacing: 1,
-              fontFamily: "'JetBrains Mono', monospace",
-            }}>{label}</button>
-          ))}
-        </div>
-      </div>
-
-      {/* SL + TP row */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
-        <div>
-          <div style={{ fontSize: 9, color: "#ff5050", letterSpacing: 2, marginBottom: 6 }}>{L.stopLoss}</div>
-          <input type="number" inputMode="decimal"
-            value={isPreviewing && previewSl !== null ? previewSl.toFixed(2) : sl}
-            onChange={e => {
-              setSl(e.target.value);
-              const slNum = parseFloat(e.target.value), tpNum = parseFloat(tp);
-              if (!isNaN(slNum) && !isNaN(tpNum)) setDirection(tpNum > slNum ? "long" : "short");
-            }}
-            placeholder={entryPrice.toFixed(2)}
-            style={inpStyle("#ff5050")} />
-          <div style={{ display: "flex", gap: 4, marginTop: 6 }}>
-            {[2,3,4].map(r => {
-              const tpNum = parseFloat(tp);
-              const ok = direction && !isNaN(tpNum);
-              return (
-                <button key={r} onClick={() => {
-                  if (!ok) return;
-                  const reward = Math.abs(tpNum - entryPrice);
-                  setSl((direction === "long" ? entryPrice - reward/r : entryPrice + reward/r).toFixed(2));
-                }} style={{
-                  flex: 1, padding: "6px 0", borderRadius: 4, fontSize: 11,
-                  border: "1px solid rgba(255,80,80,0.25)",
-                  background: ok ? "rgba(255,80,80,0.08)" : T.surfaceMed,
-                  color: ok ? "#ff8080" : T.textDim, cursor: ok ? "pointer" : "not-allowed",
-                  fontFamily: "'JetBrains Mono', monospace",
-                }}>1:{r}</button>
-              );
-            })}
-          </div>
-        </div>
-        <div>
-          <div style={{ fontSize: 9, color: T.green, letterSpacing: 2, marginBottom: 6 }}>{L.takeProfit}</div>
-          <input type="number" inputMode="decimal"
-            value={isPreviewing && previewTp !== null ? previewTp.toFixed(2) : tp}
-            onChange={e => {
-              setTp(e.target.value);
-              const tpNum = parseFloat(e.target.value), slNum = parseFloat(sl);
-              if (!isNaN(tpNum) && !isNaN(slNum)) setDirection(tpNum > slNum ? "long" : "short");
-            }}
-            placeholder={entryPrice.toFixed(2)}
-            style={inpStyle(T.green)} />
-          <div style={{ display: "flex", gap: 4, marginTop: 6 }}>
-            {[2,3,4].map(r => {
-              const slNum = parseFloat(sl);
-              const ok = direction && !isNaN(slNum);
-              return (
-                <button key={r} onClick={() => {
-                  if (!ok) return;
-                  const risk = Math.abs(entryPrice - slNum);
-                  setTp((direction === "long" ? entryPrice + risk*r : entryPrice - risk*r).toFixed(2));
-                }} style={{
-                  flex: 1, padding: "6px 0", borderRadius: 4, fontSize: 11,
-                  border: `1px solid ${T.greenBdr}`,
-                  background: ok ? T.greenBgBtn : T.surfaceMed,
-                  color: ok ? T.green : T.textDim, cursor: ok ? "pointer" : "not-allowed",
-                  fontFamily: "'JetBrains Mono', monospace",
-                }}>1:{r}</button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* R:R */}
-      {displayRR !== null && (
-        <div style={{ textAlign: "center", marginBottom: 14 }}>
-          <span style={{ fontSize: 11, color: T.textMuted, letterSpacing: 2 }}>{L.rrRatio} </span>
-          <span style={{ fontSize: 20, fontWeight: 700, color: "#60a5fa", fontFamily: "'Space Grotesk', sans-serif" }}>
-            1:{displayRR.toFixed(2)}
-          </span>
-        </div>
-      )}
-
-      {error && <div style={{ fontSize: 11, color: "#ff5050", marginBottom: 8, textAlign: "center" }}>{error}</div>}
-
-      <button onClick={() => { onTrade(); setOpen(false); }} style={{
-        width: "100%", padding: "16px", borderRadius: 10, border: "none",
-        background: T.greenGrad, color: "#000", fontSize: 14, fontWeight: 700,
-        letterSpacing: 2, cursor: "pointer", fontFamily: "'JetBrains Mono', monospace",
-        boxShadow: T.greenGlow,
-      }}>{L.execute}</button>
-    </div>
-  );
-}
-
-// ── Mobile game page ──────────────────────────────────────────────────────────
-function MobileGamePage({
-  T, L, phase, candles, future, visibleFuture, indicators, setIndicators,
-  tradeLines, entryPrice, drawings, activeTool, setActiveTool, clearSignal,
-  onDrawingAdd, onSetSl, onSetTp, onPreviewPrice, previewPrice,
-  direction, setDirection, sl, setSl, tp, setTp,
-  onTrade, onReset, scoreData, error, isPractice, chartError,
-  user, practiceUsed, loadPracticeChart, onClear,
-}) {
-  const [showTools, setShowTools] = React.useState(false);
-
-  const MOBILE_TOOLS = [
-    { id: "hline",      icon: "—",  tipKey: "tipHline" },
-    { id: "trendline",  icon: "↗",  tipKey: "tipTrend" },
-    { id: "set-sl",     icon: "SL", tipKey: "tipSetSl" },
-    { id: "set-tp",     icon: "TP", tipKey: "tipSetTp" },
-    { id: "ma20",       icon: "20", tipKey: "tipMa20",  isMa: true },
-    { id: "ma50",       icon: "50", tipKey: "tipMa50",  isMa: true },
-    { id: "ma100",      icon: "100",tipKey: "tipMa100", isMa: true },
-    { id: "trash",      icon: "🗑", tipKey: "tipTrash" },
-  ];
-
-  return (
-    <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", position: "relative", overflow: "hidden" }}>
-
-      {/* Chart fills available space */}
-      <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
-        <CandleChart
-          candles={candles} future={future} visibleFuture={visibleFuture}
-          indicators={indicators} tradeLines={tradeLines}
-          phase={phase} entryPrice={entryPrice}
-          drawings={drawings}
-          activeTool={phase === "setup" ? activeTool : null}
-          clearSignal={clearSignal}
-          onDrawingAdd={onDrawingAdd}
-          onSetSl={onSetSl} onSetTp={onSetTp}
-          T={T} previewPrice={previewPrice}
-          onPreviewPrice={onPreviewPrice}
-        />
-
-        {/* LIVE badge */}
-        {phase === "playing" && (
-          <div style={{ position: "absolute", top: 10, left: 10, background: T.greenDim, border: `1px solid ${T.greenBdrHi}`, borderRadius: 6, padding: "5px 12px", fontSize: 10, color: T.green, letterSpacing: 2, animation: "pulse 1s infinite" }}>{L.liveLabel}</div>
-        )}
-
-        {/* Score overlay */}
-        {phase === "done" && scoreData && (
-          <ScorePanel scoreData={scoreData} onReset={onReset} T={T} L={L} />
-        )}
-
-        {/* Active tool hint */}
-        {activeTool && phase === "setup" && (
-          <div style={{ position: "absolute", bottom: 70, left: "50%", transform: "translateX(-50%)", background: "rgba(56,189,248,0.1)", border: "1px solid rgba(56,189,248,0.25)", borderRadius: 6, padding: "5px 14px", fontSize: 10, color: "#38bdf8", letterSpacing: 1, pointerEvents: "none", whiteSpace: "nowrap" }}>
-            {activeTool === "set-sl" && L.hintSetSl}
-            {activeTool === "set-tp" && L.hintSetTp}
-            {activeTool === "hline" && L.hintHline}
-            {activeTool === "trendline" && L.hintTrend}
-          </div>
-        )}
-
-        {/* Tools toggle button */}
-        {phase === "setup" && (
-          <button onClick={() => setShowTools(v => !v)} style={{
-            position: "absolute", top: 10, right: 10,
-            width: 36, height: 36, borderRadius: 8,
-            background: showTools ? T.greenDim : T.surfaceMed,
-            border: `1px solid ${showTools ? T.greenBdr : T.borderMed}`,
-            color: showTools ? T.green : T.textMuted,
-            fontSize: 16, cursor: "pointer", display: "flex",
-            alignItems: "center", justifyContent: "center",
-          }}>✏</button>
-        )}
-
-        {/* Tools strip */}
-        {showTools && phase === "setup" && (
-          <div style={{
-            position: "absolute", top: 54, right: 10,
-            background: T.tooltipBg, border: `1px solid ${T.borderMed}`,
-            borderRadius: 10, padding: 6, display: "flex",
-            flexDirection: "column", gap: 4,
-            boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
-            animation: "fadeIn 0.15s ease",
-          }}>
-            {MOBILE_TOOLS.map(tool => {
-              const isActive = tool.isMa ? indicators[tool.id] : activeTool === tool.id;
-              const color = tool.id === "set-sl" ? "#ff5050" : tool.id === "set-tp" ? T.green : T.textMuted;
-              return (
-                <button key={tool.id} onClick={() => {
-                  if (tool.id === "trash") {
-                    if (onClear) onClear();
-                    setActiveTool(null);
-                    setShowTools(false);
-                  } else if (tool.isMa) {
-                    setIndicators(prev => ({ ...prev, [tool.id]: !prev[tool.id] }));
-                  } else {
-                    setActiveTool(activeTool === tool.id ? null : tool.id);
-                    setShowTools(false);
-                  }
-                }} style={{
-                  width: 36, height: 36, borderRadius: 6, border: `1px solid ${isActive ? color + "60" : T.borderFaint}`,
-                  background: isActive ? color + "20" : "transparent",
-                  color: isActive ? color : T.textMuted, fontSize: tool.id === "trash" ? 14 : 11,
-                  fontWeight: 700, cursor: "pointer",
-                  fontFamily: "'JetBrains Mono', monospace",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                }}>{tool.icon}</button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Bottom sheet trade controls */}
-      <div style={{ position: "relative", flexShrink: 0, height: 60 }}>
-        <MobileTradeSheet
-          T={T} L={L} phase={phase} entryPrice={entryPrice}
-          direction={direction} setDirection={setDirection}
-          sl={sl} setSl={setSl} tp={tp} setTp={setTp}
-          onTrade={onTrade} onReset={onReset}
-          scoreData={scoreData} previewPrice={previewPrice} error={error}
-        />
-      </div>
-    </div>
-  );
-}
 
 // ── Main App ──────────────────────────────────────────────────────────────────
 function ChartGame() {
@@ -2387,7 +2030,6 @@ function ChartGame() {
   const [isDark, setIsDark] = useState(true);
   const [lang, setLang] = useState("en");
   const L = LANG[lang];
-  const isMobile = useIsMobile();
 
   // ── Load daily chart on mount ─────────────────────────────────────────────
   useEffect(() => {
@@ -2592,10 +2234,10 @@ function ChartGame() {
     return (
       <div style={{ height: "100vh", background: "#080c18", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
         <div style={{ fontSize: 24, fontWeight: 900, fontFamily: "'Space Grotesk', sans-serif", letterSpacing: -1, color: "#fff" }}>
-          TRA<span style={{ color: "#00ff96" }}>DLE</span>
+          CHAR<span style={{ color: "#00ff96" }}>TLE</span>
         </div>
         <div style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", letterSpacing: 3, animation: "pulse 1.5s infinite" }}>
-          LOADING CHART...
+          {L ? L.loadingChart : "LOADING CHART..."}
         </div>
       </div>
     );
@@ -2642,48 +2284,36 @@ function ChartGame() {
         input[type=number] { -moz-appearance: textfield; }
         @keyframes fadeIn { from { opacity:0; transform:scale(0.95);} to {opacity:1;transform:scale(1);} }
         @keyframes pulse { 0%,100%{opacity:1;}50%{opacity:0.5;} }
-        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
         body { font-weight: ${isDark ? 400 : 600}; }
-        /* Mobile: prevent iOS bounce/zoom */
-        @media (max-width: 768px) {
-          html, body { position: fixed; width: 100%; overflow: hidden; }
-          input, button { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
-        }
         button:hover .tool-tip { opacity: 1 !important; }
         div:hover > div.tool-tip { opacity: 1 !important; }
-      `}</style> 
+      `}</style>
 
-      {/* Temp debug - auto-hides */}
-      <div id="debugBanner" style={{background: isMobile ? '#00aa44' : '#aa4400', color:'#fff', padding:'3px 8px', fontSize:10, fontFamily:'monospace', flexShrink:0, textAlign:'center'}}>
-        CHARTLE v3 · isMobile={String(isMobile)} · w={String(typeof window !== 'undefined' ? Math.round(window.innerWidth) : 0)}
-      </div>
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: isMobile ? "10px 14px" : "14px 24px", borderBottom: `1px solid ${T.borderFaint}`, background: T.surface, flexShrink: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 10 : 24 }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 6, cursor: "pointer" }} onClick={() => setPage("game")}>
-            <span style={{ fontSize: isMobile ? 17 : 20, fontWeight: 900, fontFamily: "'Space Grotesk', sans-serif", letterSpacing: -1 }}>CHAR<span style={{ color: T.green }}>TLE</span></span>
-            {!isMobile && <span style={{ fontSize: 10, color: T.textMuted, letterSpacing: 2 }}>{L.dailyTrade}</span>}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 24px", borderBottom: `1px solid ${T.borderFaint}`, background: T.surface }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 10, cursor: "pointer" }} onClick={() => setPage("game")}>
+            <span style={{ fontSize: 20, fontWeight: 900, fontFamily: "'Space Grotesk', sans-serif", letterSpacing: -1 }}>CHAR<span style={{ color: T.green }}>TLE</span></span>
+            <span style={{ fontSize: 10, color: T.textMuted, letterSpacing: 2 }}>{L.dailyTrade}</span>
           </div>
-          {!isMobile && (
-            <div style={{ display: "flex", gap: 4 }}>
-              {[["game",L.navTrade],["journal",L.navJournal],["consensus",L.navConsensus]].map(([p, label]) => (
-                <button key={p} onClick={() => setPage(p)} style={{
-                  padding: "5px 14px", borderRadius: 5, fontSize: 11, cursor: "pointer", letterSpacing: 1,
-                  border: `1px solid ${page === p ? T.borderStr : T.borderFaint}`,
-                  background: page === p ? T.surfaceHov : "transparent",
-                  color: page === p ? T.text : T.textSub,
-                  fontFamily: "'JetBrains Mono', monospace", transition: "all 0.15s",
-                }}>{label}</button>
-              ))}
-            </div>
-          )}
+          <div style={{ display: "flex", gap: 4 }}>
+            {[["game",L.navTrade],["journal",L.navJournal],["consensus",L.navConsensus]].map(([p, label]) => (
+              <button key={p} onClick={() => setPage(p)} style={{
+                padding: "5px 14px", borderRadius: 5, fontSize: 11, cursor: "pointer", letterSpacing: 1,
+                border: `1px solid ${page === p ? T.borderStr : T.borderFaint}`,
+                background: page === p ? T.surfaceHov : "transparent",
+                color: page === p ? T.text : T.textSub,
+                fontFamily: "'JetBrains Mono', monospace", transition: "all 0.15s",
+              }}>{label}</button>
+            ))}
+          </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ fontSize: isMobile ? 14 : 22, fontWeight: 900, fontFamily: "'Space Grotesk', sans-serif", letterSpacing: -0.5, color: T.text }}>{asset}</div>
-          <div style={{ padding: isMobile ? "3px 7px" : "4px 10px", borderRadius: 6, background: T.greenDim, border: `1px solid ${T.greenBdr}`, fontSize: isMobile ? 10 : 13, fontWeight: 700, color: T.green, fontFamily: "'Space Grotesk', sans-serif", letterSpacing: 1 }}>{tf}</div>
+          <div style={{ fontSize: 22, fontWeight: 900, fontFamily: "'Space Grotesk', sans-serif", letterSpacing: -0.5, color: T.text }}>{asset}</div>
+          <div style={{ padding: "4px 10px", borderRadius: 6, background: T.greenDim, border: `1px solid ${T.greenBdr}`, fontSize: 13, fontWeight: 700, color: T.green, fontFamily: "'Space Grotesk', sans-serif", letterSpacing: 1 }}>{tf}</div>
           <button
             onClick={() => setIsDark(d => !d)}
-            title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+            title={isDark ? L.switchLight : L.switchDark}
             style={{
               width: 34, height: 34, borderRadius: 8, border: `1px solid ${T.border}`,
               background: T.surface, color: T.textMuted, cursor: "pointer",
@@ -2714,8 +2344,8 @@ function ChartGame() {
         </div>
       </div>
 
-      {/* Practice bar — desktop only */}
-      {page === "game" && !isMobile && (
+      {/* Practice bar — shown below header when on game page */}
+      {page === "game" && (
         <div style={{
           display: "flex", alignItems: "center", justifyContent: "space-between",
           padding: "6px 24px",
@@ -2725,14 +2355,14 @@ function ChartGame() {
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             {isPractice && (
               <span style={{ fontSize: 9, letterSpacing: 2, color: "#a78bfa", padding: "2px 8px", borderRadius: 4, background: "rgba(167,139,250,0.1)", border: "1px solid rgba(167,139,250,0.2)" }}>
-                {L.practiceLabel}
+                PRACTICE
               </span>
             )}
             {chartError && (
-              <span style={{ fontSize: 9, color: "#f59e0b", letterSpacing: 1 }}>⚠ {L.offlineChart}</span>
+              <span style={{ fontSize: 9, color: "#f59e0b", letterSpacing: 1 }}>⚠ {chartError}</span>
             )}
             {!isPractice && !chartError && (
-              <span style={{ fontSize: 9, color: T.textDim, letterSpacing: 2 }}>{L.dailyChartLabel}</span>
+              <span style={{ fontSize: 9, color: T.textDim, letterSpacing: 2 }}>DAILY CHART</span>
             )}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -2742,7 +2372,7 @@ function ChartGame() {
                 <span style={{ color: practiceUsed >= 3 ? "#ff5050" : T.textMuted }}>
                   {practiceUsed}/3
                 </span>
-                {" "}practice today
+                {" "}{L.practiceToday}
               </div>
             )}
             <button
@@ -2755,7 +2385,7 @@ function ChartGame() {
                 color: T.textMuted, fontFamily: "'JetBrains Mono', monospace",
                 transition: "all 0.15s",
               }}>
-              {L.newPracticeBtn}
+              NEW PRACTICE CHART →
             </button>
           </div>
         </div>
@@ -2764,43 +2394,8 @@ function ChartGame() {
       {page === "journal" && <JournalPage seed={seed} scoreData={scoreData} direction={direction} sl={sl} tp={tp} entryPrice={entryPrice} asset={asset} tf={tf} T={T} L={L} user={user} onLogin={() => setShowAuth(true)} />}
       {page === "consensus" && <ConsensusPage seed={seed} scoreData={scoreData} direction={direction} sl={parseFloat(sl)||null} tp={parseFloat(tp)||null} entryPrice={entryPrice} T={T} L={L} user={user} />}
 
-      {/* Chart area — mobile vs desktop */}
-      <div style={{ flex: 1, minHeight: 0, display: page === "game" ? "flex" : "none", flexDirection: "column", padding: isMobile ? "0" : "12px 16px 0 16px", gap: isMobile ? 0 : 10, overflow: "hidden" }}>
-
-        {isMobile ? (
-          /* ── MOBILE layout ── */
-          <MobileGamePage
-            T={T} L={L} phase={phase}
-            candles={candles} future={future} visibleFuture={visibleFuture}
-            indicators={indicators} setIndicators={setIndicators}
-            tradeLines={tradeLines} entryPrice={entryPrice}
-            drawings={drawings} activeTool={activeTool} setActiveTool={setActiveTool}
-            clearSignal={clearSignal}
-            onDrawingAdd={(d) => setDrawings(prev => [...prev, d])}
-            onSetSl={(p) => { setSl(p.toFixed(2)); setPreviewPrice(null); setActiveTool(null); const tpNum = parseFloat(tp); if (!isNaN(tpNum)) setDirection(tpNum > p ? "long" : "short"); }}
-            onSetTp={(p) => { setTp(p.toFixed(2)); setPreviewPrice(null); setActiveTool(null); const slNum = parseFloat(sl); if (!isNaN(slNum)) setDirection(p > slNum ? "long" : "short"); }}
-            onPreviewPrice={setPreviewPrice}
-            previewPrice={previewPrice}
-            direction={direction} setDirection={setDirection}
-            sl={sl} setSl={setSl} tp={tp} setTp={setTp}
-            onTrade={handleTrade} onReset={handleReset}
-            scoreData={scoreData} error={error}
-            isPractice={isPractice} chartError={chartError}
-            user={user} practiceUsed={practiceUsed}
-            loadPracticeChart={loadPracticeChart}
-            onClear={() => {
-              setDrawings([]);
-              setSl("");
-              setTp("");
-              setDirection(null);
-              setPreviewPrice(null);
-              setActiveTool(null);
-              setClearSignal(sig => sig + 1);
-            }}
-          />
-        ) : (
-          /* ── DESKTOP layout ── */
-          <>
+      {/* Chart area */}
+      <div style={{ flex: 1, minHeight: 0, display: page === "game" ? "flex" : "none", flexDirection: "column", padding: "12px 16px 0 16px", gap: 10, overflow: "hidden" }}>
         <div style={{ flex: 1, minHeight: 0, display: "flex", gap: 10, alignItems: "stretch" }}>
 
           {/* Drawing tray */}
@@ -2851,6 +2446,8 @@ function ChartGame() {
               T={T}
               previewPrice={previewPrice}
               onPreviewPrice={(preview) => {
+                // Always update preview price so R:R ratio recalculates while
+                // placing either SL or TP, even if the other line is already set.
                 setPreviewPrice(preview);
               }}
             />
@@ -3057,42 +2654,7 @@ function ChartGame() {
           ))}
         </div>{/* end instruction box */}
         </div>{/* end sticky bottom panel */}
-          </>
-        )}{/* end desktop/mobile conditional */}
       </div>{/* end game page */}
-
-      {/* ── Mobile bottom navigation ── */}
-      {isMobile && (
-        <div style={{
-          display: "flex", flexShrink: 0,
-          borderTop: `1px solid ${T.borderFaint}`,
-          background: T.pageBg,
-        }}>
-          {[["game","📈",L.navTrade],["journal","📓",L.navJournal],["consensus","👥",L.navConsensus]].map(([p, icon, label]) => (
-            <button key={p} onClick={() => setPage(p)} style={{
-              flex: 1, padding: "10px 0 8px", background: "none", border: "none",
-              cursor: "pointer", display: "flex", flexDirection: "column",
-              alignItems: "center", gap: 3,
-              borderTop: `2px solid ${page === p ? T.green : "transparent"}`,
-            }}>
-              <span style={{ fontSize: 18 }}>{icon}</span>
-              <span style={{ fontSize: 9, letterSpacing: 1, color: page === p ? T.green : T.textDim, fontFamily: "'JetBrains Mono', monospace", fontWeight: 700 }}>{label}</span>
-            </button>
-          ))}
-          <button onClick={loadPracticeChart} disabled={phase === "playing"} style={{
-            flex: 1, padding: "10px 0 8px", background: "none", border: "none",
-            cursor: phase === "playing" ? "not-allowed" : "pointer",
-            display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
-            borderTop: "2px solid transparent",
-            opacity: phase === "playing" ? 0.4 : 1,
-          }}>
-            <span style={{ fontSize: 18 }}>🔀</span>
-            <span style={{ fontSize: 9, letterSpacing: 1, color: T.textDim, fontFamily: "'JetBrains Mono', monospace", fontWeight: 700 }}>
-              {isPractice ? L.practiceLabel : "NEW"}
-            </span>
-          </button>
-        </div>
-      )}
       {/* ── Modals ── */}
       {showAuth && (
         <AuthModal T={T} L={L}
