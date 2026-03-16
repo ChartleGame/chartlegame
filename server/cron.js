@@ -221,7 +221,7 @@ function buildChart(bars, asset, tf, assetType) {
     const low   = Math.min(open, close) - Math.random() * range * 0.5;
     const vol   = last.volume * (0.6 + Math.random() * 0.8);
     future.push({ open, high, low, close, volume: vol });
-    price = close;
+    price = close; 
   }
 
   return {
