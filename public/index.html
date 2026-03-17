@@ -705,7 +705,7 @@ function ScorePanel({ scoreData, onReset, T, L }) {
           <div style={{ fontSize: 9, color: T.textLabel, letterSpacing: 3, marginBottom: 14 }}>{L.scoreBreakdown}</div>
           <ScoreBar T={T} label={L.scoreDir} pts={directionScore} max={40} color="#a78bfa" sublabel={L.priority1} />
           <ScoreBar T={T} label={L.scoreTp} pts={outcomeScore} max={40} color={T.green} sublabel={L.priority2} />
-          <ScoreBar T={T} label={L.scoreRr} pts={rrScore} max={20} color="#f59e0b" sublabel={`${L.scoreRr} · efficiency ${scoreData.efficiencyScore ?? '—'} + ratio ${scoreData.ratioScore ?? '—'}`} />
+          <ScoreBar T={T} label={L.scoreRr} pts={rrScore} max={20} color="#f59e0b" sublabel={L.priority3} />
         </div>
 
         <div style={{ display: "flex", gap: 16, justifyContent: "center", marginBottom: 20 }}>
@@ -2040,7 +2040,7 @@ const LANG = {
     correctDir: "✓ Correct direction", wrongDir: "✗ Wrong direction",
     scoreBreakdown: "SCORE BREAKDOWN",
     scoreDir: "DIRECTION", scoreTp: "HIT TAKE PROFIT", scoreRr: "R:R QUALITY",
-    priority1: "Priority 1 · 40 pts", priority2: "Priority 2 · 40 pts",
+    priority1: "Priority 1 · 40 pts", priority2: "Priority 2 · 40 pts", priority3: "Priority 3 · 20 pts",
     pnl: "P&L", rr: "R:R",
     comeBack: "Come back tomorrow for a new chart",
     liveLabel: "● LIVE",
@@ -2186,7 +2186,7 @@ const LANG = {
     correctDir: "✓ Bonne direction", wrongDir: "✗ Mauvaise direction",
     scoreBreakdown: "DÉTAIL DU SCORE",
     scoreDir: "DIRECTION", scoreTp: "TAKE PROFIT ATTEINT", scoreRr: "QUALITÉ R:R",
-    priority1: "Priorité 1 · 40 pts", priority2: "Priorité 2 · 40 pts",
+    priority1: "Priorité 1 · 40 pts", priority2: "Priorité 2 · 40 pts", priority3: "Priorité 3 · 20 pts",
     pnl: "P&L", rr: "R:R",
     comeBack: "Revenez demain pour un nouveau graphique",
     liveLabel: "● EN DIRECT",
