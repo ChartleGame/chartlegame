@@ -164,6 +164,29 @@ async function usernameExists(username, excludeId = null) {
   return rows.length > 0;
 }
 
+async function searchUsers(query) {
+  const pattern = `%${query.toLowerCase()}%`;
+  const { rows } = await pool.query(
+    `SELECT id, email, username, verified, subscription_status, stripe_customer_id,
+            stripe_subscription_id, subscription_activated_at, created_at
+     FROM users
+     WHERE LOWER(email) LIKE $1 OR LOWER(username) LIKE $1
+     ORDER BY created_at DESC LIMIT 50`,
+    [pattern]
+  );
+  return rows.map(r => ({
+    id: r.id, email: r.email, username: r.username,
+    verified: r.verified,
+    subscription: {
+      status: r.subscription_status,
+      stripeCustomerId: r.stripe_customer_id,
+      stripeSubscriptionId: r.stripe_subscription_id,
+      activatedAt: r.subscription_activated_at,
+    },
+    createdAt: r.created_at,
+  }));
+}
+
 async function createUser({ id, email, username, passwordHash, verifyToken }) {
   await pool.query(
     `INSERT INTO users (id, email, username, password_hash, verify_token, created_at)
@@ -318,7 +341,7 @@ async function init() {
 module.exports = {
   pool, init,
   getUserById, getUserByEmail, getUserByVerifyToken, getUserByResetToken,
-  getUserByStripeCustomer, usernameExists,
+  getUserByStripeCustomer, usernameExists, searchUsers,
   createUser, updateUser, deleteUser,
   getPracticeCount, incrementPractice,
   getJournalEntries, getJournalEntry, upsertJournalEntry,

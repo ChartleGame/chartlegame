@@ -947,6 +947,152 @@ function fmtDate(seed) {
 }
 
 // ── Journal Page ──────────────────────────────────────────────────────────────
+// ── Admin Panel ──────────────────────────────────────────────────────────────
+function AdminPanel({ T, L }) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  const search = async () => {
+    if (!query.trim()) return;
+    setSearching(true);
+    setMsg(null);
+    try {
+      const data = await window.apiFetch(`/api/admin/users?q=${encodeURIComponent(query.trim())}`);
+      setResults(data);
+      if (data.length === 0) setMsg({ type: "info", text: L.adminNoResults });
+    } catch (e) {
+      setMsg({ type: "err", text: e.message });
+    }
+    setSearching(false);
+  };
+
+  const deleteUser = async (user) => {
+    if (!window.confirm(`${L.adminConfirmDelete} ${user.username} (${user.email})?`)) return;
+    try {
+      await window.apiFetch(`/api/admin/users/${user.id}`, { method: "DELETE" });
+      setResults(prev => prev.filter(u => u.id !== user.id));
+      setMsg({ type: "ok", text: `${user.email} ${L.adminDeleted}` });
+    } catch (e) {
+      setMsg({ type: "err", text: e.message });
+    }
+  };
+
+  const cancelSub = async (user) => {
+    if (!window.confirm(`${L.adminConfirmCancel} ${user.username}?`)) return;
+    try {
+      await window.apiFetch(`/api/admin/users/${user.id}/cancel-subscription`, { method: "POST" });
+      setResults(prev => prev.map(u => u.id === user.id ? { ...u, subscription: { ...u.subscription, status: "cancelled" } } : u));
+      setMsg({ type: "ok", text: `${user.email} ${L.adminCancelled}` });
+    } catch (e) {
+      setMsg({ type: "err", text: e.message });
+    }
+  };
+
+  const fmtDate = (ts) => {
+    if (!ts) return "—";
+    return new Date(ts).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  };
+
+  const inp = {
+    flex: 1, padding: "10px 14px", borderRadius: 8,
+    background: T.surfaceMed, border: `1px solid ${T.borderMed}`,
+    color: T.text, fontSize: 12, outline: "none",
+    fontFamily: "'JetBrains Mono', monospace",
+  };
+
+  const btnStyle = (color, bg) => ({
+    padding: "5px 12px", borderRadius: 5, fontSize: 10, cursor: "pointer",
+    letterSpacing: 1, fontWeight: 700, border: `1px solid ${color}30`,
+    background: bg || `${color}12`, color,
+    fontFamily: "'JetBrains Mono', monospace",
+  });
+
+  return (
+    <div style={{ flex: 1, padding: 24, overflow: "auto", background: T.pageBg, color: T.text }}>
+      <div style={{ maxWidth: 700, margin: "0 auto" }}>
+        <div style={{ fontSize: 11, letterSpacing: 3, color: T.textMuted, marginBottom: 6 }}>{L.adminTitle}</div>
+        <div style={{ fontSize: 20, fontWeight: 700, fontFamily: "'Space Grotesk', sans-serif", color: T.text, marginBottom: 20 }}>{L.adminUserMgmt}</div>
+
+        {/* Search bar */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+          <input
+            style={inp}
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && search()}
+            placeholder={L.adminSearchPlaceholder}
+          />
+          <button onClick={search} disabled={searching} style={{
+            padding: "10px 20px", borderRadius: 8, border: "none",
+            background: T.greenGrad, color: "#000", fontSize: 11, fontWeight: 700,
+            letterSpacing: 1, cursor: "pointer", fontFamily: "'JetBrains Mono', monospace",
+          }}>
+            {searching ? "..." : L.adminSearchBtn}
+          </button>
+        </div>
+
+        {/* Messages */}
+        {msg && (
+          <div style={{
+            padding: "10px 14px", borderRadius: 8, marginBottom: 16, fontSize: 11,
+            background: msg.type === "ok" ? T.greenDim : msg.type === "err" ? "rgba(255,80,80,0.08)" : T.surfaceMed,
+            border: `1px solid ${msg.type === "ok" ? T.greenBdr : msg.type === "err" ? "rgba(255,80,80,0.25)" : T.borderFaint}`,
+            color: msg.type === "ok" ? T.green : msg.type === "err" ? "#ff5050" : T.textMuted,
+          }}>
+            {msg.text}
+          </div>
+        )}
+
+        {/* Results */}
+        {results.map(u => (
+          <div key={u.id} style={{
+            background: T.surface, border: `1px solid ${T.border}`, borderRadius: 10,
+            padding: "16px 20px", marginBottom: 10, animation: "fadeIn 0.2s ease",
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: T.text, fontFamily: "'Space Grotesk', sans-serif" }}>{u.username}</div>
+                <div style={{ fontSize: 11, color: T.textMuted, marginTop: 2 }}>{u.email}</div>
+              </div>
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <div style={{
+                  fontSize: 9, padding: "3px 8px", borderRadius: 4, letterSpacing: 1, fontWeight: 700,
+                  background: u.subscription?.status === "active" ? T.greenDim : T.surfaceMed,
+                  border: `1px solid ${u.subscription?.status === "active" ? T.greenBdr : T.borderFaint}`,
+                  color: u.subscription?.status === "active" ? T.green : T.textDim,
+                }}>
+                  {u.subscription?.status === "active" ? "⭐ PRO" : u.subscription?.status?.toUpperCase() || "FREE"}
+                </div>
+                {u.verified && <span style={{ fontSize: 9, color: T.green }}>✓</span>}
+                {!u.verified && <span style={{ fontSize: 9, color: "#f59e0b" }}>⚠</span>}
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: 16, fontSize: 10, color: T.textMuted, marginBottom: 12 }}>
+              <span>{L.adminJoined}: {fmtDate(u.createdAt)}</span>
+              {u.subscription?.activatedAt && <span>{L.adminProSince}: {fmtDate(u.subscription.activatedAt)}</span>}
+              <span>ID: {u.id.slice(0, 8)}…</span>
+            </div>
+
+            <div style={{ display: "flex", gap: 8 }}>
+              {u.subscription?.status === "active" && (
+                <button onClick={() => cancelSub(u)} style={btnStyle("#f59e0b")}>
+                  {L.adminCancelSub}
+                </button>
+              )}
+              <button onClick={() => deleteUser(u)} style={btnStyle("#ff5050")}>
+                {L.adminDeleteUser}
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Journal dummy entries ─────────────────────────────────────────────────────
 const DUMMY_ENTRIES = [
   { key: "journal:20260308", seed: 20260308, asset: "BTC/USD", tf: "4H", direction: "long", sl: "81200.00", tp: "84600.00", entryPrice: 82100, score: 78, result: "tp", grade: "A", notes: "Clear higher low structure forming. Broke above the 4H resistance with volume. Entered on the retest. Exited cleanly at target.", savedAt: 1 },
@@ -1984,6 +2130,21 @@ const LANG = {
     perDay: "/day",
     subProIncludes: "PRO INCLUDES",
     subManageHint: "To update billing or cancel, contact support or use the Stripe billing portal when configured.",
+    // Admin panel
+    navAdmin: "ADMIN",
+    adminTitle: "ADMIN PANEL",
+    adminUserMgmt: "User Management",
+    adminSearchPlaceholder: "Search by email or username...",
+    adminSearchBtn: "SEARCH",
+    adminNoResults: "No users found.",
+    adminConfirmDelete: "Permanently delete user",
+    adminConfirmCancel: "Cancel subscription for",
+    adminDeleted: "deleted",
+    adminCancelled: "subscription cancelled",
+    adminJoined: "Joined",
+    adminProSince: "Pro since",
+    adminCancelSub: "CANCEL SUB",
+    adminDeleteUser: "DELETE USER",
   },
   fr: {
     dailyTrade: "TRADE QUOTIDIEN",
@@ -2115,6 +2276,21 @@ const LANG = {
     perDay: "/jour",
     subProIncludes: "PRO INCLUT",
     subManageHint: "Pour modifier la facturation ou annuler, contactez le support ou utilisez le portail Stripe une fois configuré.",
+    // Admin panel
+    navAdmin: "ADMIN",
+    adminTitle: "PANNEAU ADMIN",
+    adminUserMgmt: "Gestion des utilisateurs",
+    adminSearchPlaceholder: "Rechercher par courriel ou nom d'utilisateur...",
+    adminSearchBtn: "RECHERCHER",
+    adminNoResults: "Aucun utilisateur trouvé.",
+    adminConfirmDelete: "Supprimer définitivement l'utilisateur",
+    adminConfirmCancel: "Annuler l'abonnement de",
+    adminDeleted: "supprimé",
+    adminCancelled: "abonnement annulé",
+    adminJoined: "Inscrit",
+    adminProSince: "Pro depuis",
+    adminCancelSub: "ANNULER ABO",
+    adminDeleteUser: "SUPPRIMER",
   },
 };
 
@@ -2447,7 +2623,9 @@ function ChartGame() {
             <span style={{ fontSize: 10, color: T.textMuted, letterSpacing: 2 }}>{L.dailyTrade}</span>
           </div>
           <div style={{ display: "flex", gap: 4 }}>
-            {[["game",L.navTrade],["journal",L.navJournal],["consensus",L.navConsensus]].map(([p, label]) => (
+            {[["game",L.navTrade],["journal",L.navJournal],["consensus",L.navConsensus],
+              ...(user?.isAdmin ? [["admin", L.navAdmin]] : [])
+            ].map(([p, label]) => (
               <button key={p} onClick={() => setPage(p)} style={{
                 padding: "5px 14px", borderRadius: 5, fontSize: 11, cursor: "pointer", letterSpacing: 1,
                 border: `1px solid ${page === p ? T.borderStr : T.borderFaint}`,
@@ -2543,6 +2721,7 @@ function ChartGame() {
 
       {page === "journal" && <JournalPage seed={seed} scoreData={scoreData} direction={direction} sl={sl} tp={tp} entryPrice={entryPrice} asset={asset} tf={tf} T={T} L={L} user={user} onLogin={() => setShowAuth(true)} />}
       {page === "consensus" && <ConsensusPage seed={seed} scoreData={scoreData} direction={direction} sl={parseFloat(sl)||null} tp={parseFloat(tp)||null} entryPrice={entryPrice} T={T} L={L} user={user} />}
+      {page === "admin" && user?.isAdmin && <AdminPanel T={T} L={L} />}
 
       {/* Chart area */}
       <div style={{ flex: 1, minHeight: 0, display: page === "game" ? "flex" : "none", flexDirection: "column", padding: "12px 16px 0 16px", gap: 10, overflow: "hidden" }}>

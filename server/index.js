@@ -246,6 +246,8 @@ app.post("/api/auth/login", async (req, res) => {
     { expiresIn: process.env.JWT_EXPIRES_IN || "30d" }
   );
 
+  const isAdmin = user.email === (process.env.ADMIN_EMAIL || "").toLowerCase();
+
   res.json({
     token,
     user: {
@@ -253,6 +255,7 @@ app.post("/api/auth/login", async (req, res) => {
       email: user.email,
       username: user.username,
       verified: user.verified,
+      isAdmin,
       subscription: {
         status: user.subscription_status,
         stripeCustomerId: user.stripe_customer_id,
@@ -345,6 +348,7 @@ app.get("/api/user/me", requireAuth, async (req, res) => {
     email:        user.email,
     username:     user.username,
     verified:     user.verified,
+    isAdmin:      user.email === (process.env.ADMIN_EMAIL || "").toLowerCase(),
     subscription: {
       status: user.subscription_status,
       stripeCustomerId: user.stripe_customer_id,
@@ -456,6 +460,68 @@ app.post("/api/consensus", requireAuth, async (req, res) => {
 
   await db.submitConsensus(req.user.id, { seed, direction, sl, tp, score, result });
   res.json({ ok: true });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADMIN ENDPOINTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+function requireAdmin(req, res, next) {
+  if (!req.user) return res.status(401).json({ error: "Not authenticated" });
+  const adminEmail = (process.env.ADMIN_EMAIL || "").toLowerCase();
+  if (!adminEmail || req.user.email !== adminEmail) {
+    return res.status(403).json({ error: "Admin access required" });
+  }
+  next();
+}
+
+// GET /api/admin/users?q=search
+app.get("/api/admin/users", requireAuth, requireAdmin, async (req, res) => {
+  const q = (req.query.q || "").trim();
+  if (!q) return res.json([]);
+  const users = await db.searchUsers(q);
+  res.json(users);
+});
+
+// DELETE /api/admin/users/:id
+app.delete("/api/admin/users/:id", requireAuth, requireAdmin, async (req, res) => {
+  const targetId = req.params.id;
+
+  // Prevent deleting yourself
+  if (targetId === req.user.id) {
+    return res.status(400).json({ error: "Cannot delete your own admin account" });
+  }
+
+  const target = await db.getUserById(targetId);
+  if (!target) return res.status(404).json({ error: "User not found" });
+
+  // Cancel Stripe subscription if active
+  if (target.stripe_subscription_id) {
+    try {
+      await stripe.subscriptions.cancel(target.stripe_subscription_id);
+    } catch (e) { console.error("Stripe cancel failed:", e.message); }
+  }
+
+  await db.deleteUser(targetId);
+  console.log(`[ADMIN] Deleted user ${target.email} (${targetId})`);
+  res.json({ ok: true, message: `User ${target.email} deleted` });
+});
+
+// POST /api/admin/users/:id/cancel-subscription
+app.post("/api/admin/users/:id/cancel-subscription", requireAuth, requireAdmin, async (req, res) => {
+  const target = await db.getUserById(req.params.id);
+  if (!target) return res.status(404).json({ error: "User not found" });
+
+  // Cancel on Stripe if exists
+  if (target.stripe_subscription_id) {
+    try {
+      await stripe.subscriptions.cancel(target.stripe_subscription_id);
+    } catch (e) { console.error("Stripe cancel failed:", e.message); }
+  }
+
+  await db.updateUser(target.id, { subscription_status: "cancelled" });
+  console.log(`[ADMIN] Cancelled subscription for ${target.email} (${target.id})`);
+  res.json({ ok: true, message: `Subscription cancelled for ${target.email}` });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
