@@ -10,7 +10,7 @@ const pool = new Pool({
   ssl: process.env.DB_SSL === "false" ? false : { rejectUnauthorized: false },
   max: 10,
   idleTimeoutMillis: 30000,
-});
+}); 
 
 pool.on("error", (err) => {
   console.error("[DB] Unexpected pool error:", err.message);
