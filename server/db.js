@@ -75,6 +75,19 @@ async function initSchema() {
         count        INTEGER DEFAULT 1,
         UNIQUE(user_id, date_key)
       );
+
+      CREATE TABLE IF NOT EXISTS daily_scores (
+        id           SERIAL PRIMARY KEY,
+        player_id    TEXT NOT NULL,
+        seed         INTEGER NOT NULL,
+        direction    TEXT,
+        sl           TEXT,
+        tp           TEXT,
+        score_data   JSONB,
+        visible_future INTEGER,
+        created_at   BIGINT NOT NULL,
+        UNIQUE(player_id, seed)
+      );
     `);
     console.log("[DB] Schema initialised.");
   } finally {
@@ -314,6 +327,38 @@ async function clearPracticeSessions(dateKey) {
   return rowCount;
 }
 
+// ── Daily score helpers ───────────────────────────────────────────────────────
+
+async function getDailyScore(playerId, seed) {
+  const { rows } = await pool.query(
+    "SELECT direction, sl, tp, score_data, visible_future FROM daily_scores WHERE player_id = $1 AND seed = $2",
+    [playerId, seed]
+  );
+  if (!rows[0]) return null;
+  return {
+    direction: rows[0].direction,
+    sl: rows[0].sl,
+    tp: rows[0].tp,
+    scoreData: rows[0].score_data,
+    visibleFuture: rows[0].visible_future,
+  };
+}
+
+async function saveDailyScore(playerId, seed, data) {
+  await pool.query(
+    `INSERT INTO daily_scores (player_id, seed, direction, sl, tp, score_data, visible_future, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+     ON CONFLICT (player_id, seed) DO NOTHING`,
+    [playerId, seed, data.direction, data.sl, data.tp, JSON.stringify(data.scoreData), data.visibleFuture, Date.now()]
+  );
+}
+
+async function clearDailyScores(seed) {
+  const { rowCount } = await pool.query("DELETE FROM daily_scores WHERE seed = $1", [seed]);
+  if (rowCount > 0) console.log(`[DB] Cleared ${rowCount} daily scores for seed ${seed}`);
+  return rowCount;
+}
+
 // ── Seed admin/test account ───────────────────────────────────────────────────
 async function seedTestAccount() {
   const email    = process.env.ADMIN_EMAIL;
@@ -359,4 +404,5 @@ module.exports = {
   getJournalEntries, getJournalEntry, upsertJournalEntry,
   submitConsensus, getConsensusPool, hasVotedConsensus, clearConsensus,
   clearPracticeSessions,
+  getDailyScore, saveDailyScore, clearDailyScores,
 };

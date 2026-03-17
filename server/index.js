@@ -77,6 +77,22 @@ function optionalAuth(req, res, next) {
   next();
 }
 
+// ── Player ID helper (logged-in user ID or anon cookie) ──────────────────────
+function getPlayerId(req, res) {
+  if (req.user) return req.user.id;
+  // Parse anon cookie from header
+  const cookies = (req.headers.cookie || "").split(";").reduce((acc, c) => {
+    const [k, ...v] = c.trim().split("=");
+    if (k) acc[k] = v.join("=");
+    return acc;
+  }, {});
+  if (cookies.chartle_anon) return "anon_" + cookies.chartle_anon;
+  // Generate new anon ID and set cookie (1 year expiry)
+  const anonId = uuid();
+  res.cookie("chartle_anon", anonId, { maxAge: 365 * 24 * 60 * 60 * 1000, httpOnly: true, sameSite: "lax" });
+  return "anon_" + anonId;
+}
+
 // ── Today's date key ──────────────────────────────────────────────────────────
 function todayKey() {
   const d = new Date();
@@ -456,6 +472,27 @@ app.post("/api/journal", requireAuth, async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// DAILY SCORE ENDPOINTS — server-side tracking of daily attempts
+// ─────────────────────────────────────────────────────────────────────────────
+
+// GET /api/daily-score/:seed — check if player has already played today
+app.get("/api/daily-score/:seed", optionalAuth, async (req, res) => {
+  const seed = parseInt(req.params.seed);
+  const playerId = getPlayerId(req, res);
+  const score = await db.getDailyScore(playerId, seed);
+  res.json({ played: !!score, score });
+});
+
+// POST /api/daily-score — save daily score when trade completes
+app.post("/api/daily-score", optionalAuth, async (req, res) => {
+  const { seed, direction, sl, tp, scoreData, visibleFuture } = req.body;
+  if (!seed || !direction) return res.status(400).json({ error: "seed and direction required" });
+  const playerId = getPlayerId(req, res);
+  await db.saveDailyScore(playerId, seed, { direction, sl, tp, scoreData, visibleFuture });
+  res.json({ ok: true });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // CONSENSUS ENDPOINTS (NEW — replaces localStorage)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -551,12 +588,13 @@ app.post("/api/admin/reset-daily", requireAuth, requireAdmin, async (req, res) =
 
   const consensusCleared = await db.clearConsensus(todaySeed);
   const practiceCleared = await db.clearPracticeSessions(today);
+  const scoresCleared = await db.clearDailyScores(todaySeed);
   const newVersion = incrementResetVersion();
 
-  console.log(`[ADMIN] Reset daily: consensus=${consensusCleared}, practice=${practiceCleared}, resetVersion=${newVersion}`);
+  console.log(`[ADMIN] Reset daily: consensus=${consensusCleared}, practice=${practiceCleared}, scores=${scoresCleared}, resetVersion=${newVersion}`);
   res.json({
     ok: true,
-    message: `Reset v${newVersion}: cleared ${consensusCleared} consensus votes, ${practiceCleared} practice sessions. All users can replay today's chart.`,
+    message: `Reset v${newVersion}: cleared ${consensusCleared} consensus, ${practiceCleared} practice, ${scoresCleared} daily scores. All users can replay.`,
   });
 });
 
@@ -735,8 +773,9 @@ db.init()
           try {
             const cc = await db.clearConsensus(todaySeed);
             const pc = await db.clearPracticeSessions(today);
+            const sc = await db.clearDailyScores(todaySeed);
             const rv = incrementResetVersion();
-            console.log(`[STARTUP] Cleared stale data: ${cc} consensus, ${pc} practice, resetVersion=${rv}`);
+            console.log(`[STARTUP] Cleared stale data: ${cc} consensus, ${pc} practice, ${sc} scores, resetVersion=${rv}`);
           } catch (e) {
             console.error("[STARTUP] Clear stale data failed:", e.message);
           }
