@@ -1387,10 +1387,7 @@ function ConsensusPage({ seed, scoreData, direction, sl, tp, entryPrice, T, L, u
   useEffect(() => {
     setLoading(true);
     setError(null);
-    fetch(window.API_BASE + `/api/consensus/${seed}`, {
-      headers: window.auth.getToken() ? { "Authorization": "Bearer " + window.auth.getToken() } : {},
-    })
-      .then(r => r.json())
+    window.apiFetch(`/api/consensus/${seed}`)
       .then(res => {
         setData(res.pool || []);
         setSubmitted(res.hasVoted || false);
@@ -2634,12 +2631,10 @@ function ChartGame() {
             }),
           }).catch(() => {});
           // Submit to consensus (fire and forget — server ignores duplicates)
-          if (window.auth.isLoggedIn()) {
-            window.apiFetch("/api/consensus", {
-              method: "POST",
-              body: JSON.stringify({ seed, direction, sl: slNum, tp: tpNum, score: finalScore.score, result: finalScore.result }),
-            }).catch(() => {});
-          }
+          window.apiFetch("/api/consensus", {
+            method: "POST",
+            body: JSON.stringify({ seed, direction, sl: slNum, tp: tpNum, score: finalScore.score, result: finalScore.result }),
+          }).catch(() => {});
         }
       }
     }, 220);

@@ -90,6 +90,11 @@ async function initSchema() {
       );
     `);
     console.log("[DB] Schema initialised.");
+
+    // Migration: drop FK on consensus_votes.user_id so anon users can vote
+    try {
+      await client.query(`ALTER TABLE consensus_votes DROP CONSTRAINT IF EXISTS consensus_votes_user_id_fkey`);
+    } catch {}
   } finally {
     client.release();
   }

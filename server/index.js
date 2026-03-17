@@ -500,21 +500,17 @@ app.post("/api/daily-score", optionalAuth, async (req, res) => {
 app.get("/api/consensus/:seed", optionalAuth, async (req, res) => {
   const seed = parseInt(req.params.seed);
   const pool = await db.getConsensusPool(seed);
-
-  let hasVoted = false;
-  if (req.user) {
-    hasVoted = await db.hasVotedConsensus(req.user.id, seed);
-  }
-
+  const playerId = getPlayerId(req, res);
+  const hasVoted = await db.hasVotedConsensus(playerId, seed);
   res.json({ pool, hasVoted });
 });
 
 // POST /api/consensus — submit a vote
-app.post("/api/consensus", requireAuth, async (req, res) => {
+app.post("/api/consensus", optionalAuth, async (req, res) => {
   const { seed, direction, sl, tp, score, result } = req.body;
   if (!seed || !direction) return res.status(400).json({ error: "seed and direction required" });
-
-  await db.submitConsensus(req.user.id, { seed, direction, sl, tp, score, result });
+  const playerId = getPlayerId(req, res);
+  await db.submitConsensus(playerId, { seed, direction, sl, tp, score, result });
   res.json({ ok: true });
 });
 
