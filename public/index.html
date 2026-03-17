@@ -2385,8 +2385,9 @@ function ChartGame() {
       if (saved && !isPractice) {
         const s = JSON.parse(saved);
         // If admin reset happened since this result was saved, invalidate it
-        if (s.resetVersion !== undefined && chartData?.resetVersion !== undefined
-            && s.resetVersion !== chartData.resetVersion) {
+        // resetVersion > 0 means admin has clicked reset at least once
+        // Old saves without resetVersion (undefined) also get cleared
+        if (chartData?.resetVersion > 0 && s.resetVersion !== chartData.resetVersion) {
           console.log("[Chartle] Admin reset detected — clearing saved result.");
           localStorage.removeItem(dailyKey);
           resetTradeState();

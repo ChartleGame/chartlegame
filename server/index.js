@@ -725,14 +725,28 @@ db.init()
       const todayFile = path.join(DAILY_DIR, `${todayKey()}.json`);
       if (!fs.existsSync(todayFile)) {
         console.log("[STARTUP] No daily chart for today — fetching now...");
-        // Calculate seed the same way as frontend: YYYYMMDD
+        // Chart is being regenerated (redeploy wiped it, or new day)
+        // Clear ALL stale daily data BEFORE fetching the new chart
         const d = new Date();
         const todaySeed = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
-        // Clear old consensus votes since chart is being regenerated
-        db.clearConsensus(todaySeed).catch(e => console.error("[STARTUP] Clear consensus failed:", e.message));
-        fetchAndSaveDailyChart()
-          .then(() => console.log("[STARTUP] Daily chart ready."))
-          .catch(e => console.error("[STARTUP] Daily chart fetch failed:", e.message));
+        const today = todayKey();
+
+        (async () => {
+          try {
+            const cc = await db.clearConsensus(todaySeed);
+            const pc = await db.clearPracticeSessions(today);
+            const rv = incrementResetVersion();
+            console.log(`[STARTUP] Cleared stale data: ${cc} consensus, ${pc} practice, resetVersion=${rv}`);
+          } catch (e) {
+            console.error("[STARTUP] Clear stale data failed:", e.message);
+          }
+          try {
+            await fetchAndSaveDailyChart();
+            console.log("[STARTUP] Daily chart ready.");
+          } catch (e) {
+            console.error("[STARTUP] Daily chart fetch failed:", e.message);
+          }
+        })();
       }
     });
   })
