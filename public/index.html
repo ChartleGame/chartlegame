@@ -2008,7 +2008,15 @@ function ChartGame() {
   const [showPaywall, setShowPaywall] = useState(false);
   const [paywallReason, setPaywallReason] = useState("daily_limit");
   const [showSettings, setShowSettings] = useState(false);
-  const [practiceUsed, setPracticeUsed] = useState(() => window.practiceUsage.getCount());
+  const [practiceUsed, setPracticeUsed] = useState(0);
+
+  // Sync practice usage from server on mount (and when user changes)
+  useEffect(() => {
+    if (!user) { setPracticeUsed(0); return; }
+    window.apiFetch("/api/chart/practice-count")
+      .then(data => setPracticeUsed(data.used || 0))
+      .catch(() => {});
+  }, [user]);
 
   const [page, setPage] = useState("game");
   const [phase, setPhase] = useState("setup");
@@ -2027,6 +2035,22 @@ function ChartGame() {
   const [isDark, setIsDark] = useState(true);
   const [lang, setLang] = useState("en");
   const L = LANG[lang];
+
+  // ── Restore today's daily result from localStorage if already played ───────
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(`chartle_daily_${seed}`);
+      if (saved) {
+        const s = JSON.parse(saved);
+        setDirection(s.direction);
+        setSl(s.sl);
+        setTp(s.tp);
+        setScoreData(s.scoreData);
+        setVisibleFuture(s.visibleFuture);
+        setPhase("done");
+      }
+    } catch {}
+  }, [seed]);
 
   // ── Load daily chart on mount ─────────────────────────────────────────────
   useEffect(() => {
@@ -2054,30 +2078,28 @@ function ChartGame() {
       setShowAuth(true);
       return;
     }
-    // Check limit for free users
-    const FREE_MAX = 3;
-    const isPaid = window.auth.isPaid();
-    const used = window.practiceUsage.getCount();
-    if (!isPaid && used >= FREE_MAX) {
-      setPaywallReason("daily_limit");
-      setShowPaywall(true);
-      return;
-    }
-    // Fetch from server
+    // Fetch from server (server enforces the limit)
     setChartLoading(true);
     try {
-      const id = String(practiceIdRef.current).padStart(4, "0");
       const data = await window.apiFetch(`/api/chart/practice/${practiceIdRef.current}`);
       practiceIdRef.current++;
-      const newCount = window.practiceUsage.increment();
-      setPracticeUsed(newCount);
       setChartData(data);
       setIsPractice(true);
       resetTradeState();
       setChartLoading(false);
+      // Sync counter from server
+      try {
+        const usage = await window.apiFetch("/api/chart/practice-count");
+        setPracticeUsed(usage.used || 0);
+      } catch {}
     } catch(e) {
       setChartLoading(false);
       if (e.status === 403) {
+        // Limit reached — sync counter and show paywall
+        try {
+          const usage = await window.apiFetch("/api/chart/practice-count");
+          setPracticeUsed(usage.used || 0);
+        } catch {}
         setPaywallReason("daily_limit");
         setShowPaywall(true);
       } else if (e.status === 401) {
@@ -2257,8 +2279,18 @@ function ChartGame() {
       const result = calcScore(direction, entryPrice, slNum, tpNum, chartData.future.slice(0, bar));
       if (result.result !== "timeout" || bar >= future.length) {
         clearInterval(iv);
-        setScoreData(calcScore(direction, entryPrice, slNum, tpNum, chartData.future));
+        const finalScore = calcScore(direction, entryPrice, slNum, tpNum, chartData.future);
+        setScoreData(finalScore);
         setPhase("done");
+        // Persist daily result so it survives page reload
+        if (!isPractice) {
+          try {
+            localStorage.setItem(`chartle_daily_${seed}`, JSON.stringify({
+              direction, sl: String(slNum), tp: String(tpNum),
+              scoreData: finalScore, visibleFuture: chartData.future.length,
+            }));
+          } catch {}
+        }
       }
     }, 220);
     setPlayInterval(iv);
