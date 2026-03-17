@@ -2363,6 +2363,22 @@ function ChartGame() {
     } catch {}
   }, [seed, user]);
 
+  // ── Invalidate saved result if the chart changed (e.g. after a redeploy) ──
+  useEffect(() => {
+    if (!chartData || isPractice || phase !== "done") return;
+    try {
+      const saved = localStorage.getItem(dailyKey);
+      if (saved) {
+        const s = JSON.parse(saved);
+        if (s.asset && s.asset !== chartData.asset) {
+          console.log("[Chartle] Chart changed since last play — resetting.");
+          localStorage.removeItem(dailyKey);
+          resetTradeState();
+        }
+      }
+    } catch {}
+  }, [chartData]);
+
   // ── Load daily chart on mount ─────────────────────────────────────────────
   useEffect(() => {
     setChartLoading(true);
@@ -2592,6 +2608,7 @@ function ChartGame() {
             localStorage.setItem(dailyKey, JSON.stringify({
               direction, sl: String(slNum), tp: String(tpNum),
               scoreData: finalScore, visibleFuture: chartData.future.length,
+              asset: chartData.asset,
             }));
           } catch {}
         }
