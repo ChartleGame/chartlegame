@@ -9,39 +9,19 @@ const fs         = require("fs");
 const path       = require("path");
 const stripe     = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const { Resend } = require("resend");
+const db         = require("./db");
 
 const app    = express();
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-// ── Paths ─────────────────────────────────────────────────────────────────────
+// ── Paths (charts stay as files — they're just cache) ─────────────────────────
 const DATA_DIR     = path.join(__dirname, "data");
 const DAILY_DIR    = path.join(DATA_DIR, "daily");
 const PRACTICE_DIR = path.join(DATA_DIR, "practice");
-const USERS_FILE   = path.join(DATA_DIR, "users.json");
-const SESSIONS_FILE= path.join(DATA_DIR, "sessions.json"); // practice usage tracking
 
-// Ensure directories exist
 [DATA_DIR, DAILY_DIR, PRACTICE_DIR].forEach(d => {
   if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
 });
-
-// ── Simple JSON file DB helpers ───────────────────────────────────────────────
-function readJSON(filePath, fallback = {}) {
-  try {
-    if (!fs.existsSync(filePath)) return fallback;
-    return JSON.parse(fs.readFileSync(filePath, "utf8"));
-  } catch { return fallback; }
-}
-
-function writeJSON(filePath, data) {
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf8");
-}
-
-function getUsers()   { return readJSON(USERS_FILE, {}); }
-function saveUsers(u) { writeJSON(USERS_FILE, u); }
-
-function getSessions()   { return readJSON(SESSIONS_FILE, {}); }
-function saveSessions(s) { writeJSON(SESSIONS_FILE, s); }
 
 // ── Middleware ────────────────────────────────────────────────────────────────
 // Stripe webhooks need raw body — must come before express.json()
@@ -89,17 +69,15 @@ function todayKey() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CHART ENDPOINTS
+// CHART ENDPOINTS (still file-based — charts are just cache)
 // ─────────────────────────────────────────────────────────────────────────────
 
 // GET /api/chart/daily
-// Returns today's pre-fetched chart. No auth required.
 app.get("/api/chart/daily", optionalAuth, (req, res) => {
   const key  = todayKey();
   const file = path.join(DAILY_DIR, `${key}.json`);
 
   if (!fs.existsSync(file)) {
-    // Fallback: return most recent available daily chart
     const files = fs.readdirSync(DAILY_DIR)
       .filter(f => f.endsWith(".json"))
       .sort()
@@ -120,21 +98,16 @@ app.get("/api/chart/daily", optionalAuth, (req, res) => {
 });
 
 // GET /api/chart/practice/:id
-// Returns a practice chart. Requires auth. Free users: 3/day. Paid: unlimited.
-app.get("/api/chart/practice/:id", requireAuth, (req, res) => {
-  const users    = getUsers();
-  const user     = users[req.user.id];
+app.get("/api/chart/practice/:id", requireAuth, async (req, res) => {
+  const user = await db.getUserById(req.user.id);
   if (!user) return res.status(404).json({ error: "User not found" });
 
-  const isPaid   = user.subscription?.status === "active";
+  const isPaid   = user.subscription_status === "active";
   const FREE_MAX = parseInt(process.env.FREE_PRACTICE_PER_DAY || "3");
 
   if (!isPaid) {
-    // Check today's usage
-    const sessions  = getSessions();
     const today     = todayKey();
-    const userKey   = `${req.user.id}:${today}`;
-    const usedToday = sessions[userKey] || 0;
+    const usedToday = await db.getPracticeCount(req.user.id, today);
 
     if (usedToday >= FREE_MAX) {
       return res.status(403).json({
@@ -145,9 +118,7 @@ app.get("/api/chart/practice/:id", requireAuth, (req, res) => {
       });
     }
 
-    // Increment counter
-    sessions[userKey] = usedToday + 1;
-    saveSessions(sessions);
+    await db.incrementPractice(req.user.id, today);
   }
 
   // Find the practice chart
@@ -155,7 +126,6 @@ app.get("/api/chart/practice/:id", requireAuth, (req, res) => {
   const file = path.join(PRACTICE_DIR, `${id}.json`);
 
   if (!fs.existsSync(file)) {
-    // Return a random available chart
     const files = fs.readdirSync(PRACTICE_DIR).filter(f => f.endsWith(".json"));
     if (files.length === 0) {
       return res.status(503).json({ error: "No practice charts available yet." });
@@ -170,29 +140,22 @@ app.get("/api/chart/practice/:id", requireAuth, (req, res) => {
 });
 
 // GET /api/chart/practice-count
-// Returns how many practice charts the user has used today
-app.get("/api/chart/practice-count", requireAuth, (req, res) => {
-  const users  = getUsers();
-  const user   = users[req.user.id];
+app.get("/api/chart/practice-count", requireAuth, async (req, res) => {
+  const user = await db.getUserById(req.user.id);
   if (!user) return res.status(404).json({ error: "User not found" });
 
-  const isPaid = user.subscription?.status === "active";
+  const isPaid = user.subscription_status === "active";
   const FREE_MAX = parseInt(process.env.FREE_PRACTICE_PER_DAY || "3");
 
   if (isPaid) {
     return res.json({ used: 0, limit: null, isPaid: true });
   }
 
-  const sessions = getSessions();
-  const today    = todayKey();
-  const userKey  = `${req.user.id}:${today}`;
-  const used     = sessions[userKey] || 0;
-
+  const used = await db.getPracticeCount(req.user.id, todayKey());
   res.json({ used, limit: FREE_MAX, isPaid: false });
 });
 
 // GET /api/chart/pool-size
-// Returns how many practice charts are in the pool (admin info)
 app.get("/api/chart/pool-size", (req, res) => {
   const count = fs.readdirSync(PRACTICE_DIR).filter(f => f.endsWith(".json")).length;
   res.json({ count });
@@ -212,29 +175,18 @@ app.post("/api/auth/signup", async (req, res) => {
     return res.status(400).json({ error: "Password must be at least 8 characters" });
   }
 
-  const users = getUsers();
-
   // Check duplicates
-  const emailExists    = Object.values(users).some(u => u.email === email.toLowerCase());
-  const usernameExists = Object.values(users).some(u => u.username.toLowerCase() === username.toLowerCase());
-  if (emailExists)    return res.status(409).json({ error: "Email already registered" });
-  if (usernameExists) return res.status(409).json({ error: "Username already taken" });
+  const emailUser = await db.getUserByEmail(email);
+  if (emailUser) return res.status(409).json({ error: "Email already registered" });
+
+  const nameTaken = await db.usernameExists(username);
+  if (nameTaken) return res.status(409).json({ error: "Username already taken" });
 
   const id           = uuid();
   const passwordHash = await bcrypt.hash(password, 12);
   const verifyToken  = uuid();
 
-  users[id] = {
-    id,
-    email: email.toLowerCase(),
-    username,
-    passwordHash,
-    verifyToken,
-    verified: false,
-    createdAt: Date.now(),
-    subscription: { status: "free" },
-  };
-  saveUsers(users);
+  await db.createUser({ id, email, username, passwordHash, verifyToken });
 
   // Send verification email
   try {
@@ -257,7 +209,6 @@ app.post("/api/auth/signup", async (req, res) => {
     });
   } catch (e) {
     console.error("Email send failed:", e.message);
-    // Don't fail signup if email fails — just log it
   }
 
   const token = jwt.sign({ id, email: email.toLowerCase(), username }, process.env.JWT_SECRET, {
@@ -283,11 +234,10 @@ app.post("/api/auth/login", async (req, res) => {
     return res.status(400).json({ error: "Email and password are required" });
   }
 
-  const users = getUsers();
-  const user  = Object.values(users).find(u => u.email === email.toLowerCase());
+  const user = await db.getUserByEmail(email);
   if (!user) return res.status(401).json({ error: "Invalid email or password" });
 
-  const valid = await bcrypt.compare(password, user.passwordHash);
+  const valid = await bcrypt.compare(password, user.password_hash);
   if (!valid) return res.status(401).json({ error: "Invalid email or password" });
 
   const token = jwt.sign(
@@ -303,16 +253,19 @@ app.post("/api/auth/login", async (req, res) => {
       email: user.email,
       username: user.username,
       verified: user.verified,
-      subscription: user.subscription,
+      subscription: {
+        status: user.subscription_status,
+        stripeCustomerId: user.stripe_customer_id,
+        stripeSubscriptionId: user.stripe_subscription_id,
+      },
     },
   });
 });
 
 // GET /api/auth/verify?token=xxx
-app.get("/api/auth/verify", (req, res) => {
+app.get("/api/auth/verify", async (req, res) => {
   const { token } = req.query;
-  const users = getUsers();
-  const user  = Object.values(users).find(u => u.verifyToken === token);
+  const user = await db.getUserByVerifyToken(token);
 
   if (!user) {
     return res.send(`<html><body style="font-family:monospace;text-align:center;padding:60px">
@@ -321,9 +274,7 @@ app.get("/api/auth/verify", (req, res) => {
     </body></html>`);
   }
 
-  users[user.id].verified = true;
-  users[user.id].verifyToken = null;
-  saveUsers(users);
+  await db.updateUser(user.id, { verified: true, verify_token: null });
 
   res.send(`<html><body style="font-family:monospace;text-align:center;padding:60px">
     <h2 style="color:#00a65a">✓ Email verified!</h2>
@@ -335,20 +286,14 @@ app.get("/api/auth/verify", (req, res) => {
 // POST /api/auth/forgot-password
 app.post("/api/auth/forgot-password", async (req, res) => {
   const { email } = req.body;
-  const users = getUsers();
-  const user  = Object.values(users).find(u => u.email === email?.toLowerCase());
-
-  // Always return 200 to prevent email enumeration
   res.json({ message: "If that email exists, a reset link has been sent." });
 
+  const user = await db.getUserByEmail(email);
   if (!user) return;
 
   const resetToken   = uuid();
   const resetExpires = Date.now() + 1000 * 60 * 60; // 1 hour
-
-  users[user.id].resetToken   = resetToken;
-  users[user.id].resetExpires = resetExpires;
-  saveUsers(users);
+  await db.updateUser(user.id, { reset_token: resetToken, reset_expires: resetExpires });
 
   try {
     await resend.emails.send({
@@ -376,17 +321,11 @@ app.post("/api/auth/reset-password", async (req, res) => {
   if (!token || !password) return res.status(400).json({ error: "Token and password required" });
   if (password.length < 8)  return res.status(400).json({ error: "Password must be at least 8 characters" });
 
-  const users = getUsers();
-  const user  = Object.values(users).find(
-    u => u.resetToken === token && u.resetExpires > Date.now()
-  );
-
+  const user = await db.getUserByResetToken(token);
   if (!user) return res.status(400).json({ error: "Invalid or expired reset token" });
 
-  users[user.id].passwordHash  = await bcrypt.hash(password, 12);
-  users[user.id].resetToken    = null;
-  users[user.id].resetExpires  = null;
-  saveUsers(users);
+  const passwordHash = await bcrypt.hash(password, 12);
+  await db.updateUser(user.id, { password_hash: passwordHash, reset_token: null, reset_expires: null });
 
   res.json({ message: "Password updated successfully" });
 });
@@ -396,9 +335,8 @@ app.post("/api/auth/reset-password", async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 // GET /api/user/me
-app.get("/api/user/me", requireAuth, (req, res) => {
-  const users = getUsers();
-  const user  = users[req.user.id];
+app.get("/api/user/me", requireAuth, async (req, res) => {
+  const user = await db.getUserById(req.user.id);
   if (!user) return res.status(404).json({ error: "User not found" });
 
   res.json({
@@ -406,76 +344,131 @@ app.get("/api/user/me", requireAuth, (req, res) => {
     email:        user.email,
     username:     user.username,
     verified:     user.verified,
-    subscription: user.subscription,
-    createdAt:    user.createdAt,
+    subscription: {
+      status: user.subscription_status,
+      stripeCustomerId: user.stripe_customer_id,
+      stripeSubscriptionId: user.stripe_subscription_id,
+    },
+    createdAt:    user.created_at,
   });
 });
 
-// PATCH /api/user/me  — update username or password
+// PATCH /api/user/me — update username or password
 app.patch("/api/user/me", requireAuth, async (req, res) => {
   const { username, currentPassword, newPassword } = req.body;
-  const users = getUsers();
-  const user  = users[req.user.id];
+  const user = await db.getUserById(req.user.id);
   if (!user) return res.status(404).json({ error: "User not found" });
 
+  const updates = {};
+
   if (username && username !== user.username) {
-    const taken = Object.values(users).some(
-      u => u.id !== user.id && u.username.toLowerCase() === username.toLowerCase()
-    );
+    const taken = await db.usernameExists(username, user.id);
     if (taken) return res.status(409).json({ error: "Username already taken" });
-    users[req.user.id].username = username;
+    updates.username = username;
   }
 
   if (newPassword) {
     if (!currentPassword) return res.status(400).json({ error: "Current password required" });
-    const valid = await bcrypt.compare(currentPassword, user.passwordHash);
+    const valid = await bcrypt.compare(currentPassword, user.password_hash);
     if (!valid) return res.status(401).json({ error: "Current password is incorrect" });
     if (newPassword.length < 8) return res.status(400).json({ error: "New password must be at least 8 characters" });
-    users[req.user.id].passwordHash = await bcrypt.hash(newPassword, 12);
+    updates.password_hash = await bcrypt.hash(newPassword, 12);
   }
 
-  saveUsers(users);
+  if (Object.keys(updates).length > 0) {
+    await db.updateUser(user.id, updates);
+  }
+
   res.json({ message: "Profile updated successfully" });
 });
 
 // DELETE /api/user/me — delete account
 app.delete("/api/user/me", requireAuth, async (req, res) => {
   const { password } = req.body;
-  const users = getUsers();
-  const user  = users[req.user.id];
+  const user = await db.getUserById(req.user.id);
   if (!user) return res.status(404).json({ error: "User not found" });
 
-  const valid = await bcrypt.compare(password, user.passwordHash);
+  const valid = await bcrypt.compare(password, user.password_hash);
   if (!valid) return res.status(401).json({ error: "Incorrect password" });
 
   // Cancel Stripe subscription if active
-  if (user.subscription?.stripeSubscriptionId) {
+  if (user.stripe_subscription_id) {
     try {
-      await stripe.subscriptions.cancel(user.subscription.stripeSubscriptionId);
+      await stripe.subscriptions.cancel(user.stripe_subscription_id);
     } catch (e) { console.error("Stripe cancel failed:", e.message); }
   }
 
-  delete users[req.user.id];
-  saveUsers(users);
-
+  await db.deleteUser(req.user.id); // cascades to journal + consensus
   res.json({ message: "Account deleted" });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// JOURNAL ENDPOINTS (NEW — replaces localStorage)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// GET /api/journal — all entries for the logged-in user
+app.get("/api/journal", requireAuth, async (req, res) => {
+  const entries = await db.getJournalEntries(req.user.id);
+  res.json(entries);
+});
+
+// GET /api/journal/:seed — single entry
+app.get("/api/journal/:seed", requireAuth, async (req, res) => {
+  const entry = await db.getJournalEntry(req.user.id, parseInt(req.params.seed));
+  res.json(entry); // null if not found
+});
+
+// POST /api/journal — create or update an entry
+app.post("/api/journal", requireAuth, async (req, res) => {
+  const { seed, asset, tf, direction, sl, tp, entryPrice, score, result, grade, notes } = req.body;
+  if (!seed) return res.status(400).json({ error: "seed is required" });
+
+  await db.upsertJournalEntry(req.user.id, {
+    seed, asset, tf, direction, sl, tp, entryPrice, score, result, grade, notes: notes || "",
+  });
+
+  res.json({ ok: true });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONSENSUS ENDPOINTS (NEW — replaces localStorage)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// GET /api/consensus/:seed — get the pool for a day
+app.get("/api/consensus/:seed", optionalAuth, async (req, res) => {
+  const seed = parseInt(req.params.seed);
+  const pool = await db.getConsensusPool(seed);
+
+  let hasVoted = false;
+  if (req.user) {
+    hasVoted = await db.hasVotedConsensus(req.user.id, seed);
+  }
+
+  res.json({ pool, hasVoted });
+});
+
+// POST /api/consensus — submit a vote
+app.post("/api/consensus", requireAuth, async (req, res) => {
+  const { seed, direction, sl, tp, score, result } = req.body;
+  if (!seed || !direction) return res.status(400).json({ error: "seed and direction required" });
+
+  await db.submitConsensus(req.user.id, { seed, direction, sl, tp, score, result });
+  res.json({ ok: true });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // STRIPE ENDPOINTS
 // ─────────────────────────────────────────────────────────────────────────────
 
-// POST /api/stripe/checkout — create a Stripe Checkout Session
+// POST /api/stripe/checkout
 app.post("/api/stripe/checkout", requireAuth, async (req, res) => {
-  const users = getUsers();
-  const user  = users[req.user.id];
+  const user = await db.getUserById(req.user.id);
   if (!user) return res.status(404).json({ error: "User not found" });
 
-  // If already subscribed, redirect to billing portal instead
-  if (user.subscription?.stripeCustomerId) {
+  if (user.stripe_customer_id) {
     try {
       const portal = await stripe.billingPortal.sessions.create({
-        customer:   user.subscription.stripeCustomerId,
+        customer:   user.stripe_customer_id,
         return_url: process.env.FRONTEND_URL || "http://localhost:3000",
       });
       return res.json({ url: portal.url });
@@ -494,7 +487,6 @@ app.post("/api/stripe/checkout", requireAuth, async (req, res) => {
       success_url: `${process.env.FRONTEND_URL || "http://localhost:3000"}?subscribed=true`,
       cancel_url:  `${process.env.FRONTEND_URL || "http://localhost:3000"}?cancelled=true`,
       metadata: { userId: req.user.id },
-      // Enable currency auto-detection (Stripe handles USD/CAD/EUR based on card)
       automatic_tax: { enabled: false },
     });
 
@@ -505,17 +497,16 @@ app.post("/api/stripe/checkout", requireAuth, async (req, res) => {
   }
 });
 
-// POST /api/stripe/portal — manage existing subscription
+// POST /api/stripe/portal
 app.post("/api/stripe/portal", requireAuth, async (req, res) => {
-  const users = getUsers();
-  const user  = users[req.user.id];
-  if (!user?.subscription?.stripeCustomerId) {
+  const user = await db.getUserById(req.user.id);
+  if (!user?.stripe_customer_id) {
     return res.status(400).json({ error: "No active subscription found" });
   }
 
   try {
     const portal = await stripe.billingPortal.sessions.create({
-      customer:   user.subscription.stripeCustomerId,
+      customer:   user.stripe_customer_id,
       return_url: process.env.FRONTEND_URL || "http://localhost:3000",
     });
     res.json({ url: portal.url });
@@ -524,7 +515,7 @@ app.post("/api/stripe/portal", requireAuth, async (req, res) => {
   }
 });
 
-// POST /api/stripe/webhook — Stripe event handler (raw body, registered above)
+// POST /api/stripe/webhook
 async function handleStripeWebhook(req, res) {
   let event;
   try {
@@ -538,20 +529,17 @@ async function handleStripeWebhook(req, res) {
     return res.status(400).send(`Webhook Error: ${e.message}`);
   }
 
-  const users = getUsers();
-
   switch (event.type) {
     case "checkout.session.completed": {
-      const session  = event.data.object;
-      const userId   = session.metadata?.userId;
-      if (userId && users[userId]) {
-        users[userId].subscription = {
-          status:               "active",
-          stripeCustomerId:     session.customer,
-          stripeSubscriptionId: session.subscription,
-          activatedAt:          Date.now(),
-        };
-        saveUsers(users);
+      const session = event.data.object;
+      const userId  = session.metadata?.userId;
+      if (userId) {
+        await db.updateUser(userId, {
+          subscription_status:       "active",
+          stripe_customer_id:        session.customer,
+          stripe_subscription_id:    session.subscription,
+          subscription_activated_at: Date.now(),
+        });
         console.log(`✓ Subscription activated for user ${userId}`);
       }
       break;
@@ -559,39 +547,29 @@ async function handleStripeWebhook(req, res) {
 
     case "customer.subscription.deleted":
     case "customer.subscription.paused": {
-      const sub    = event.data.object;
-      const userId = Object.keys(users).find(
-        id => users[id].subscription?.stripeCustomerId === sub.customer
-      );
-      if (userId) {
-        users[userId].subscription.status = "cancelled";
-        saveUsers(users);
-        console.log(`✗ Subscription cancelled for user ${userId}`);
+      const sub  = event.data.object;
+      const user = await db.getUserByStripeCustomer(sub.customer);
+      if (user) {
+        await db.updateUser(user.id, { subscription_status: "cancelled" });
+        console.log(`✗ Subscription cancelled for user ${user.id}`);
       }
       break;
     }
 
     case "customer.subscription.updated": {
-      const sub    = event.data.object;
-      const userId = Object.keys(users).find(
-        id => users[id].subscription?.stripeCustomerId === sub.customer
-      );
-      if (userId) {
-        users[userId].subscription.status = sub.status; // active / past_due / etc
-        saveUsers(users);
+      const sub  = event.data.object;
+      const user = await db.getUserByStripeCustomer(sub.customer);
+      if (user) {
+        await db.updateUser(user.id, { subscription_status: sub.status });
       }
       break;
     }
 
     case "invoice.payment_failed": {
       const invoice = event.data.object;
-      const userId  = Object.keys(users).find(
-        id => users[id].subscription?.stripeCustomerId === invoice.customer
-      );
-      if (userId) {
-        users[userId].subscription.status = "past_due";
-        saveUsers(users);
-        // Optionally send a payment failed email here
+      const user    = await db.getUserByStripeCustomer(invoice.customer);
+      if (user) {
+        await db.updateUser(user.id, { subscription_status: "past_due" });
       }
       break;
     }
@@ -601,12 +579,11 @@ async function handleStripeWebhook(req, res) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CRON — run within the same process (also available standalone via cron.js)
+// CRON
 // ─────────────────────────────────────────────────────────────────────────────
 const cron = require("node-cron");
 const { fetchAndSaveDailyChart, fetchAndSavePracticeChart } = require("./cron");
 
-// Every day at 00:01 — fetch tomorrow's daily chart
 cron.schedule("1 0 * * *", async () => {
   console.log("[CRON] Fetching daily chart...");
   try {
@@ -617,10 +594,9 @@ cron.schedule("1 0 * * *", async () => {
   }
 });
 
-// Every hour — add one practice chart to the pool (uses ~1 API call)
 cron.schedule("0 * * * *", async () => {
   const count = fs.readdirSync(PRACTICE_DIR).filter(f => f.endsWith(".json")).length;
-  if (count >= 5000) return; // pool is full
+  if (count >= 5000) return;
   console.log(`[CRON] Adding practice chart (pool: ${count}/5000)...`);
   try {
     await fetchAndSavePracticeChart();
@@ -630,20 +606,28 @@ cron.schedule("0 * * * *", async () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// START
+// START — init DB, then listen
 // ─────────────────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`\n🟢 Chartle server running on port ${PORT}`);
-  console.log(`   Frontend: http://localhost:${PORT}`);
-  console.log(`   API:      http://localhost:${PORT}/api\n`);
 
-  // Fetch daily chart on startup if today's doesn't exist
-  const todayFile = path.join(DAILY_DIR, `${todayKey()}.json`);
-  if (!fs.existsSync(todayFile)) {
-    console.log("[STARTUP] No daily chart for today — fetching now...");
-    fetchAndSaveDailyChart()
-      .then(() => console.log("[STARTUP] Daily chart ready."))
-      .catch(e => console.error("[STARTUP] Daily chart fetch failed:", e.message));
-  }
-});
+db.init()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`\n🟢 Chartle server running on port ${PORT}`);
+      console.log(`   Frontend: http://localhost:${PORT}`);
+      console.log(`   API:      http://localhost:${PORT}/api\n`);
+
+      // Fetch daily chart on startup if today's doesn't exist
+      const todayFile = path.join(DAILY_DIR, `${todayKey()}.json`);
+      if (!fs.existsSync(todayFile)) {
+        console.log("[STARTUP] No daily chart for today — fetching now...");
+        fetchAndSaveDailyChart()
+          .then(() => console.log("[STARTUP] Daily chart ready."))
+          .catch(e => console.error("[STARTUP] Daily chart fetch failed:", e.message));
+      }
+    });
+  })
+  .catch(e => {
+    console.error("❌ Failed to initialise database:", e.message);
+    process.exit(1);
+  });

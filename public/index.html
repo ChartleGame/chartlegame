@@ -172,7 +172,7 @@ function calcScore(direction, entryPrice, sl, tp, future) {
     if (tpHit) { result = "tp"; exitBar = i; exitPrice = tp; break; }
   }
   const finalClose = future[future.length - 1].close;
-  const correctDirection = mult * (finalClose - entryPrice) > 0;
+  const correctDirection = result === "tp" ? true : result === "sl" ? false : mult * (finalClose - entryPrice) > 0;
   const risk = Math.abs(entryPrice - sl);
   const reward = Math.abs(tp - entryPrice);
   const rrRatio = reward / Math.max(risk, 0.0001);
@@ -958,8 +958,7 @@ const DUMMY_ENTRIES = [
   { key: "journal:20260228", seed: 20260228, asset: "SOL/USD", tf: "4H", direction: "long", sl: "138.00", tp: "152.00", entryPrice: 143.5, score: 67, result: "tp", grade: "B", notes: "Good entry, but TP was set too conservatively. Price continued well past my target.", savedAt: 1 },
 ];
 
-function JournalPage({ seed, scoreData, direction, sl, tp, entryPrice, asset, tf, T, L }) {
-  const storageKey = `journal:${seed}`;
+function JournalPage({ seed, scoreData, direction, sl, tp, entryPrice, asset, tf, T, L, user, onLogin }) {
   const [notes, setNotes] = useState("");
   const [saved, setSaved] = useState(false);
   const [realEntries, setRealEntries] = useState([]);
@@ -969,28 +968,24 @@ function JournalPage({ seed, scoreData, direction, sl, tp, entryPrice, asset, tf
 
   useEffect(() => {
     async function load() {
+      if (!user) { setLoading(false); return; }
       try {
-        const res = await window.storage.get(storageKey);
-        if (res) setNotes(JSON.parse(res.value).notes || "");
+        // Load current entry's notes
+        const current = await window.apiFetch(`/api/journal/${seed}`);
+        if (current) setNotes(current.notes || "");
       } catch {}
       try {
-        const list = await window.storage.list("journal:");
-        const loaded = [];
-        for (const k of (list?.keys || [])) {
-          try {
-            const r = await window.storage.get(k);
-            if (r) loaded.push({ key: k, ...JSON.parse(r.value) });
-          } catch {}
-        }
-        loaded.sort((a, b) => b.seed - a.seed);
-        setRealEntries(loaded);
+        // Load all entries
+        const entries = await window.apiFetch("/api/journal");
+        if (Array.isArray(entries)) setRealEntries(entries);
       } catch {}
       setLoading(false);
     }
     load();
-  }, [seed]);
+  }, [seed, user]);
 
   const handleSave = async () => {
+    if (!user) { onLogin(); return; }
     const entry = {
       seed, notes, direction, sl, tp, entryPrice, asset, tf,
       score: scoreData?.score ?? null,
@@ -999,7 +994,10 @@ function JournalPage({ seed, scoreData, direction, sl, tp, entryPrice, asset, tf
       savedAt: Date.now(),
     };
     try {
-      await window.storage.set(storageKey, JSON.stringify(entry));
+      await window.apiFetch("/api/journal", {
+        method: "POST",
+        body: JSON.stringify(entry),
+      });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
       setRealEntries(prev => [entry, ...prev.filter(e => e.seed !== seed)]);
@@ -1202,31 +1200,30 @@ function generateDummyPool(entryPrice) {
 }
 
 // ── Consensus Page ────────────────────────────────────────────────────────────
-function ConsensusPage({ seed, scoreData, direction, sl, tp, entryPrice, T, L }) {
-  const storageKey = `consensus:${seed}`;
+function ConsensusPage({ seed, scoreData, direction, sl, tp, entryPrice, T, L, user }) {
   const [submitted, setSubmitted] = useState(false);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Submit current trade if completed and not yet submitted
+  // Submit current trade if completed and not yet submitted, then load pool
   useEffect(() => {
     async function submitAndLoad() {
+      // Submit vote if user has completed a trade and is logged in
+      if (user && scoreData && direction && sl && tp) {
+        try {
+          await window.apiFetch("/api/consensus", {
+            method: "POST",
+            body: JSON.stringify({ seed, direction, sl: parseFloat(sl), tp: parseFloat(tp), score: scoreData.score, result: scoreData.result }),
+          });
+        } catch {} // ignore duplicates
+      }
+      // Load pool
       try {
-        const myKey = `consensus-mine:${seed}`;
-        const mine = await window.storage.get(myKey);
-        if (mine) setSubmitted(true);
-        else if (scoreData && direction && sl && tp) {
-          await window.storage.set(myKey, JSON.stringify({ direction, sl, tp, score: scoreData.score, result: scoreData.result }));
-          const existing = await window.storage.get(storageKey, true).catch(() => null);
-          const pool = existing ? JSON.parse(existing.value) : [];
-          pool.push({ direction, sl, tp, score: scoreData.score, result: scoreData.result });
-          await window.storage.set(storageKey, JSON.stringify(pool), true);
-          setSubmitted(true);
+        const res = await window.apiFetch(`/api/consensus/${seed}`);
+        if (res) {
+          setData(res.pool);
+          setSubmitted(res.hasVoted);
         }
-      } catch {}
-      try {
-        const res = await window.storage.get(storageKey, true);
-        if (res) setData(JSON.parse(res.value));
       } catch {}
       setLoading(false);
     }
