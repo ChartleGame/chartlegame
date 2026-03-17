@@ -149,7 +149,7 @@ function generateOHLC(rng, displayBars = 80) {
     future.push({ open, high, low, close, volume: 300 + rng() * 1500 });
     price = close;
   }
-  return { candles, future, asset, tf, entryPrice: candles[candles.length - 1].close, displayBars };
+  return { candles, future, asset, tf, entryPrice: candles[candles.length - 1].close, displayBars, fetchedAt: Date.now() };
 }
 
 function calcMA(candles, period) {
@@ -1346,7 +1346,7 @@ function generateDummyPool(entryPrice) {
 }
 
 // ── Consensus Page ────────────────────────────────────────────────────────────
-function ConsensusPage({ seed, scoreData, direction, sl, tp, entryPrice, T, L, user }) {
+function ConsensusPage({ seed, scoreData, direction, sl, tp, entryPrice, chartFetchedAt, T, L, user }) {
   const [submitted, setSubmitted] = useState(false);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -1355,13 +1355,27 @@ function ConsensusPage({ seed, scoreData, direction, sl, tp, entryPrice, T, L, u
   useEffect(() => {
     async function submitAndLoad() {
       // Submit vote if user has completed a trade and is logged in
-      if (user && scoreData && direction && sl && tp) {
+      // But only if the score came from the CURRENT chart (not a stale localStorage restore)
+      if (user && scoreData && direction && sl && tp && chartFetchedAt) {
+        // Check localStorage to verify the result matches the current chart
+        const dailyKey = `chartle_daily_${user?.id || "anon"}_${seed}`;
+        let isCurrentChart = false;
         try {
-          await window.apiFetch("/api/consensus", {
-            method: "POST",
-            body: JSON.stringify({ seed, direction, sl: parseFloat(sl), tp: parseFloat(tp), score: scoreData.score, result: scoreData.result }),
-          });
-        } catch {} // ignore duplicates
+          const saved = localStorage.getItem(dailyKey);
+          if (saved) {
+            const s = JSON.parse(saved);
+            isCurrentChart = s.chartFetchedAt === chartFetchedAt;
+          }
+        } catch {}
+
+        if (isCurrentChart) {
+          try {
+            await window.apiFetch("/api/consensus", {
+              method: "POST",
+              body: JSON.stringify({ seed, direction, sl: parseFloat(sl), tp: parseFloat(tp), score: scoreData.score, result: scoreData.result }),
+            });
+          } catch {} // ignore duplicates
+        }
       }
       // Load pool
       try {
@@ -2370,7 +2384,7 @@ function ChartGame() {
       const saved = localStorage.getItem(dailyKey);
       if (saved) {
         const s = JSON.parse(saved);
-        if (s.asset && s.asset !== chartData.asset) {
+        if (s.chartFetchedAt && s.chartFetchedAt !== chartData.fetchedAt) {
           console.log("[Chartle] Chart changed since last play — resetting.");
           localStorage.removeItem(dailyKey);
           resetTradeState();
@@ -2608,7 +2622,7 @@ function ChartGame() {
             localStorage.setItem(dailyKey, JSON.stringify({
               direction, sl: String(slNum), tp: String(tpNum),
               scoreData: finalScore, visibleFuture: chartData.future.length,
-              asset: chartData.asset,
+              chartFetchedAt: chartData.fetchedAt,
             }));
           } catch {}
         }
@@ -2745,7 +2759,7 @@ function ChartGame() {
       )}
 
       {page === "journal" && <JournalPage seed={seed} scoreData={scoreData} direction={direction} sl={sl} tp={tp} entryPrice={entryPrice} asset={asset} tf={tf} T={T} L={L} user={user} onLogin={() => setShowAuth(true)} />}
-      {page === "consensus" && <ConsensusPage seed={seed} scoreData={scoreData} direction={direction} sl={parseFloat(sl)||null} tp={parseFloat(tp)||null} entryPrice={entryPrice} T={T} L={L} user={user} />}
+      {page === "consensus" && <ConsensusPage seed={seed} scoreData={scoreData} direction={direction} sl={parseFloat(sl)||null} tp={parseFloat(tp)||null} entryPrice={entryPrice} chartFetchedAt={chartData?.fetchedAt} T={T} L={L} user={user} />}
       {page === "admin" && user?.isAdmin && <AdminPanel T={T} L={L} />}
 
       {/* Chart area */}
