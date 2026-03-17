@@ -1142,17 +1142,18 @@ function JournalPage({ seed, scoreData, direction, sl, tp, entryPrice, asset, tf
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({ direction: "all", asset: "all", tf: "all", date: "" });
   const [showFilters, setShowFilters] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [editingSeed, setEditingSeed] = useState(null);
+  const [editNotes, setEditNotes] = useState("");
 
   useEffect(() => {
     async function load() {
       if (!user) { setLoading(false); return; }
       try {
-        // Load current entry's notes
         const current = await window.apiFetch(`/api/journal/${seed}`);
         if (current) setNotes(current.notes || "");
       } catch {}
       try {
-        // Load all entries
         const entries = await window.apiFetch("/api/journal");
         if (Array.isArray(entries)) setRealEntries(entries);
       } catch {}
@@ -1161,8 +1162,25 @@ function JournalPage({ seed, scoreData, direction, sl, tp, entryPrice, asset, tf
     load();
   }, [seed, user]);
 
+  // ── Login gate ─────────────────────────────────────────────────────────────
+  if (!user) {
+    return (
+      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: T.pageBg }}>
+        <div style={{ textAlign: "center", maxWidth: 380, padding: 40 }}>
+          <div style={{ fontSize: 40, marginBottom: 16 }}>📓</div>
+          <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: 2, color: T.text, fontFamily: "'Space Grotesk', sans-serif", marginBottom: 10 }}>{L.journalLoginTitle}</div>
+          <div style={{ fontSize: 12, color: T.textMuted, lineHeight: 1.7, marginBottom: 24 }}>{L.journalLoginMsg}</div>
+          <button onClick={onLogin} style={{
+            padding: "12px 28px", borderRadius: 8, border: `1px solid ${T.greenBdr}`,
+            background: T.greenDim, color: T.green, fontSize: 12, fontWeight: 700,
+            letterSpacing: 1, cursor: "pointer", fontFamily: "'JetBrains Mono', monospace",
+          }}>{L.journalLoginBtn}</button>
+        </div>
+      </div>
+    );
+  }
+
   const handleSave = async () => {
-    if (!user) { onLogin(); return; }
     const entry = {
       seed, notes, direction, sl, tp, entryPrice, asset, tf,
       score: scoreData?.score ?? null,
@@ -1181,23 +1199,47 @@ function JournalPage({ seed, scoreData, direction, sl, tp, entryPrice, asset, tf
     } catch (e) { console.error(e); }
   };
 
+  const handleDelete = async (entrySeed) => {
+    if (!window.confirm(L.confirmDelete)) return;
+    try {
+      await window.apiFetch(`/api/journal/${entrySeed}`, { method: "DELETE" });
+      setRealEntries(prev => prev.filter(e => e.seed !== entrySeed));
+      if (editingSeed === entrySeed) setEditingSeed(null);
+    } catch (e) { console.error(e); }
+  };
+
+  const handleEditSave = async (entry) => {
+    try {
+      await window.apiFetch("/api/journal", {
+        method: "POST",
+        body: JSON.stringify({ ...entry, notes: editNotes }),
+      });
+      setRealEntries(prev => prev.map(e => e.seed === entry.seed ? { ...e, notes: editNotes } : e));
+      setEditingSeed(null);
+    } catch (e) { console.error(e); }
+  };
+
   const gradeColor = (g) => ({ S: "#ffd700", A: T.green, B: "#60a5fa", C: "#f59e0b", D: "#ff5050" })[g] || T.textMuted;
   const resultIcon = (r) => r === "tp" ? "🎯" : r === "sl" ? "🛑" : r === "timeout" ? "⏱" : "—";
 
-  // Merge real + dummy, deduplicate by seed (real takes priority)
-  const realSeeds = new Set(realEntries.map(e => e.seed));
-  const allEntries = [...realEntries, ...DUMMY_ENTRIES.filter(d => !realSeeds.has(d.seed))].sort((a,b) => b.seed - a.seed);
+  // No dummy entries — journal is login-only now
+  const allEntries = [...realEntries].sort((a,b) => b.seed - a.seed);
 
   // Derive unique filter options
   const allAssets = [...new Set(allEntries.map(e => e.asset).filter(Boolean))];
   const allTfs    = [...new Set(allEntries.map(e => e.tf).filter(Boolean))];
 
-  // Apply filters
+  // Apply filters + search
+  const sq = searchQuery.toLowerCase().trim();
   const filtered = allEntries.filter(e => {
     if (filters.direction !== "all" && e.direction !== filters.direction) return false;
     if (filters.asset !== "all" && e.asset !== filters.asset) return false;
     if (filters.tf !== "all" && e.tf !== filters.tf) return false;
     if (filters.date && !fmtDate(e.seed).includes(filters.date)) return false;
+    if (sq) {
+      const haystack = [e.notes, e.asset, e.tf, e.direction, e.result, e.grade, fmtDate(e.seed)].filter(Boolean).join(" ").toLowerCase();
+      if (!haystack.includes(sq)) return false;
+    }
     return true;
   });
 
@@ -1266,8 +1308,19 @@ function JournalPage({ seed, scoreData, direction, sl, tp, entryPrice, asset, tf
         </div>
       </div>
 
-      {/* Right: past entries with filters */}
+      {/* Right: past entries with search, filters, delete/edit */}
       <div style={{ width: 300, flexShrink: 0, display: "flex", flexDirection: "column", minHeight: 0 }}>
+
+        {/* Search bar */}
+        <div style={{ marginBottom: 10 }}>
+          <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+            placeholder={L.searchPlaceholder}
+            style={{
+              width: "100%", padding: "8px 12px", background: T.surfaceMed,
+              border: `1px solid ${T.borderMed}`, borderRadius: 6, color: T.text,
+              fontSize: 11, outline: "none", fontFamily: "'JetBrains Mono', monospace",
+            }} />
+        </div>
 
         {/* Header + filter toggle */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
@@ -1331,9 +1384,9 @@ function JournalPage({ seed, scoreData, direction, sl, tp, entryPrice, asset, tf
           {loading && <div style={{ fontSize: 11, color: T.textFaint }}>{L.loadingTxt}</div>}
           {!loading && filtered.length === 0 && <div style={{ fontSize: 11, color: T.textFaint }}>{L.noEntries}</div>}
           {filtered.map(e => {
-            const isDummy = !realSeeds.has(e.seed);
+            const isEditing = editingSeed === e.seed;
             return (
-              <div key={e.key} style={{ background: T.surface, border: `1px solid ${isDummy ? T.borderFaint : T.border}`, borderRadius: 8, padding: "12px 14px", opacity: isDummy ? 0.7 : 1 }}>
+              <div key={e.seed} style={{ background: T.surface, border: `1px solid ${isEditing ? T.borderStr : T.border}`, borderRadius: 8, padding: "12px 14px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 }}>
                   <span style={{ fontSize: 10, color: T.textMuted }}>{fmtDate(e.seed)}</span>
                   <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
@@ -1343,11 +1396,40 @@ function JournalPage({ seed, scoreData, direction, sl, tp, entryPrice, asset, tf
                     </span>
                   </div>
                 </div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: e.notes ? 6 : 0 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                   <span style={{ fontSize: 10, color: T.textMuted }}>{e.asset} · {e.tf}</span>
                   {e.result && <span style={{ fontSize: 10, color: e.result === "tp" ? T.green : e.result === "sl" ? "#ff5050" : T.textMuted }}>{resultIcon(e.result)}</span>}
                 </div>
-                {e.notes && <div style={{ fontSize: 10, color: T.textMuted, lineHeight: 1.5, maxHeight: 44, overflow: "hidden" }}>{e.notes}</div>}
+
+                {/* Notes: show textarea if editing, otherwise text */}
+                {isEditing ? (
+                  <div>
+                    <textarea value={editNotes} onChange={ev => setEditNotes(ev.target.value)}
+                      style={{ width: "100%", minHeight: 60, background: T.surfaceMed, border: `1px solid ${T.borderMed}`, borderRadius: 5, color: T.text, fontSize: 10, fontFamily: "'JetBrains Mono', monospace", padding: "6px 8px", resize: "vertical", outline: "none", lineHeight: 1.5 }} />
+                    <div style={{ display: "flex", gap: 6, marginTop: 6, justifyContent: "flex-end" }}>
+                      <button onClick={() => setEditingSeed(null)} style={{ padding: "3px 10px", borderRadius: 4, fontSize: 9, cursor: "pointer", border: `1px solid ${T.borderMed}`, background: "transparent", color: T.textMuted, fontFamily: "'JetBrains Mono', monospace", letterSpacing: 1 }}>{L.cancelEdit}</button>
+                      <button onClick={() => handleEditSave(e)} style={{ padding: "3px 10px", borderRadius: 4, fontSize: 9, cursor: "pointer", border: `1px solid ${T.greenBdr}`, background: T.greenDim, color: T.green, fontFamily: "'JetBrains Mono', monospace", letterSpacing: 1 }}>{L.saveEntry}</button>
+                    </div>
+                  </div>
+                ) : (
+                  e.notes && <div style={{ fontSize: 10, color: T.textMuted, lineHeight: 1.5, maxHeight: 44, overflow: "hidden" }}>{e.notes}</div>
+                )}
+
+                {/* Edit / Delete buttons */}
+                {!isEditing && (
+                  <div style={{ display: "flex", gap: 6, marginTop: 8, borderTop: `1px solid ${T.borderFaint}`, paddingTop: 8 }}>
+                    <button onClick={() => { setEditingSeed(e.seed); setEditNotes(e.notes || ""); }} style={{
+                      padding: "3px 10px", borderRadius: 4, fontSize: 9, cursor: "pointer",
+                      border: `1px solid ${T.borderMed}`, background: "transparent",
+                      color: T.textMuted, fontFamily: "'JetBrains Mono', monospace", letterSpacing: 1,
+                    }}>{L.editEntry}</button>
+                    <button onClick={() => handleDelete(e.seed)} style={{
+                      padding: "3px 10px", borderRadius: 4, fontSize: 9, cursor: "pointer",
+                      border: "1px solid rgba(255,80,80,0.2)", background: "transparent",
+                      color: "rgba(255,80,80,0.6)", fontFamily: "'JetBrains Mono', monospace", letterSpacing: 1,
+                    }}>{L.deleteEntry}</button>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -2078,6 +2160,12 @@ const LANG = {
     filterDir: "DIRECTION", filterAsset: "ASSET", filterTf: "TIMEFRAME", filterDate: "DATE",
     datePlaceholder: "e.g. 2026-03",
     loadingTxt: "Loading...", noEntries: "No entries match.",
+    journalLoginTitle: "TRADE JOURNAL",
+    journalLoginMsg: "Sign in to track your trades, review past decisions, and build your trading log.",
+    journalLoginBtn: "SIGN IN TO ACCESS JOURNAL",
+    searchPlaceholder: "Search entries...",
+    deleteEntry: "DELETE", editEntry: "EDIT", cancelEdit: "CANCEL",
+    confirmDelete: "Delete this journal entry? This cannot be undone.",
     consensusHeader: "CONSENSUS",
     howTraded: "How did everyone trade?",
     tradersLabel: (n) => `${n} trader${n !== 1 ? "s" : ""}`,
@@ -2228,6 +2316,12 @@ const LANG = {
     filterDir: "DIRECTION", filterAsset: "ACTIF", filterTf: "UNITÉ", filterDate: "DATE",
     datePlaceholder: "ex. 2026-03",
     loadingTxt: "Chargement...", noEntries: "Aucune entrée.",
+    journalLoginTitle: "JOURNAL DE TRADING",
+    journalLoginMsg: "Connectez-vous pour suivre vos trades, revoir vos décisions et construire votre journal.",
+    journalLoginBtn: "SE CONNECTER POUR ACCÉDER AU JOURNAL",
+    searchPlaceholder: "Rechercher...",
+    deleteEntry: "SUPPRIMER", editEntry: "MODIFIER", cancelEdit: "ANNULER",
+    confirmDelete: "Supprimer cette entrée ? Cette action est irréversible.",
     consensusHeader: "CONSENSUS",
     howTraded: "Comment tout le monde a tradé ?",
     tradersLabel: (n) => `${n} trader${n !== 1 ? "s" : ""}`,

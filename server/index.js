@@ -471,6 +471,13 @@ app.post("/api/journal", requireAuth, async (req, res) => {
   res.json({ ok: true });
 });
 
+// DELETE /api/journal/:seed — delete a single entry
+app.delete("/api/journal/:seed", requireAuth, async (req, res) => {
+  const seed = parseInt(req.params.seed);
+  const deleted = await db.deleteJournalEntry(req.user.id, seed);
+  res.json({ ok: true, deleted });
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // DAILY SCORE ENDPOINTS — server-side tracking of daily attempts
 // ─────────────────────────────────────────────────────────────────────────────

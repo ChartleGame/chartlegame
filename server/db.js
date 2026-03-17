@@ -293,6 +293,14 @@ async function upsertJournalEntry(userId, entry) {
   );
 }
 
+async function deleteJournalEntry(userId, seed) {
+  const { rowCount } = await pool.query(
+    "DELETE FROM journal_entries WHERE user_id = $1 AND seed = $2",
+    [userId, seed]
+  );
+  return rowCount;
+}
+
 // ── Consensus helpers ─────────────────────────────────────────────────────────
 
 async function submitConsensus(userId, vote) {
@@ -406,7 +414,7 @@ module.exports = {
   getUserByStripeCustomer, usernameExists, searchUsers,
   createUser, updateUser, deleteUser,
   getPracticeCount, incrementPractice,
-  getJournalEntries, getJournalEntry, upsertJournalEntry,
+  getJournalEntries, getJournalEntry, upsertJournalEntry, deleteJournalEntry,
   submitConsensus, getConsensusPool, hasVotedConsensus, clearConsensus,
   clearPracticeSessions,
   getDailyScore, saveDailyScore, clearDailyScores,
