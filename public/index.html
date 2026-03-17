@@ -74,7 +74,7 @@
       const token = window.auth.getToken();
       const headers = { "Content-Type": "application/json", ...(opts.headers || {}) };
       if (token) headers["Authorization"] = "Bearer " + token;
-      const res = await fetch(window.API_BASE + path, { ...opts, headers });
+      const res = await fetch(window.API_BASE + path, { ...opts, headers, credentials: "include" });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw Object.assign(new Error(data.error || "Request failed"), { status: res.status, data });
       return data;
@@ -1012,8 +1012,9 @@ function AdminPanel({ T, L }) {
   const resetDaily = async () => {
     if (!window.confirm(L.adminConfirmReset)) return;
     try {
-      const res = await window.apiFetch("/api/admin/reset-daily", { method: "POST" });
-      setMsg({ type: "ok", text: res.message });
+      await window.apiFetch("/api/admin/reset-daily", { method: "POST" });
+      // Reload so all components re-fetch from server with clean state
+      window.location.reload();
     } catch (e) {
       setMsg({ type: "err", text: e.message });
     }
@@ -2376,51 +2377,28 @@ function ChartGame() {
   const [lang, setLang] = useState("en");
   const L = LANG[lang];
 
-  // ── Restore today's daily result from localStorage if already played ───────
-  const dailyKey = `chartle_daily_${user?.id || "anon"}_${seed}`;
+  // ── Check server for existing daily score ────────────────────────────────────
+  const dailyKey = `chartle_daily_${user?.id || "anon"}_${seed}`; // kept for cleanup only
   useEffect(() => {
-    if (!chartData && !isPractice) return; // wait for chart to load so we have resetVersion
-    try {
-      const saved = localStorage.getItem(dailyKey);
-      if (saved && !isPractice) {
-        const s = JSON.parse(saved);
-        // If admin reset happened since this result was saved, invalidate it
-        // resetVersion > 0 means admin has clicked reset at least once
-        // Old saves without resetVersion (undefined) also get cleared
-        if (chartData?.resetVersion > 0 && s.resetVersion !== chartData.resetVersion) {
-          console.log("[Chartle] Admin reset detected — clearing saved result.");
-          localStorage.removeItem(dailyKey);
-          resetTradeState();
-          return;
-        }
-        setDirection(s.direction);
-        setSl(s.sl);
-        setTp(s.tp);
-        setScoreData(s.scoreData);
-        setVisibleFuture(s.visibleFuture);
-        setPhase("done");
-      } else if (!isPractice && phase === "done") {
-        // New user has no saved result — reset to setup
-        resetTradeState();
-      }
-    } catch {}
-  }, [seed, user, chartData]);
-
-  // ── Invalidate saved result if the chart changed (e.g. after a redeploy) ──
-  useEffect(() => {
-    if (!chartData || isPractice || phase !== "done") return;
-    try {
-      const saved = localStorage.getItem(dailyKey);
-      if (saved) {
-        const s = JSON.parse(saved);
-        if (s.entryPrice && s.entryPrice !== chartData.entryPrice) {
-          console.log("[Chartle] Chart changed since last play — resetting.");
-          localStorage.removeItem(dailyKey);
+    if (isPractice) return;
+    // Clean up old localStorage entries
+    try { localStorage.removeItem(dailyKey); } catch {}
+    // Check server
+    window.apiFetch(`/api/daily-score/${seed}`)
+      .then(res => {
+        if (res.played && res.score) {
+          setDirection(res.score.direction);
+          setSl(res.score.sl);
+          setTp(res.score.tp);
+          setScoreData(res.score.scoreData);
+          setVisibleFuture(res.score.visibleFuture);
+          setPhase("done");
+        } else if (phase === "done") {
           resetTradeState();
         }
-      }
-    } catch {}
-  }, [chartData]);
+      })
+      .catch(() => {}); // server down — just show setup
+  }, [seed, user]);
 
   // ── Load daily chart on mount ─────────────────────────────────────────────
   useEffect(() => {
@@ -2647,13 +2625,14 @@ function ChartGame() {
         setPhase("done");
         // Persist daily result so it survives page reload
         if (!isPractice) {
-          try {
-            localStorage.setItem(dailyKey, JSON.stringify({
-              direction, sl: String(slNum), tp: String(tpNum),
+          // Save daily score to server (works for both logged-in and anon users)
+          window.apiFetch("/api/daily-score", {
+            method: "POST",
+            body: JSON.stringify({
+              seed, direction, sl: String(slNum), tp: String(tpNum),
               scoreData: finalScore, visibleFuture: chartData.future.length,
-              entryPrice, resetVersion: chartData.resetVersion,
-            }));
-          } catch {}
+            }),
+          }).catch(() => {});
           // Submit to consensus (fire and forget — server ignores duplicates)
           if (window.auth.isLoggedIn()) {
             window.apiFetch("/api/consensus", {
