@@ -2344,10 +2344,11 @@ function ChartGame() {
   const L = LANG[lang];
 
   // ── Restore today's daily result from localStorage if already played ───────
+  const dailyKey = `chartle_daily_${user?.id || "anon"}_${seed}`;
   useEffect(() => {
     try {
-      const saved = localStorage.getItem(`chartle_daily_${seed}`);
-      if (saved) {
+      const saved = localStorage.getItem(dailyKey);
+      if (saved && !isPractice) {
         const s = JSON.parse(saved);
         setDirection(s.direction);
         setSl(s.sl);
@@ -2355,9 +2356,12 @@ function ChartGame() {
         setScoreData(s.scoreData);
         setVisibleFuture(s.visibleFuture);
         setPhase("done");
+      } else if (!isPractice && phase === "done") {
+        // New user has no saved result — reset to setup
+        resetTradeState();
       }
     } catch {}
-  }, [seed]);
+  }, [seed, user]);
 
   // ── Load daily chart on mount ─────────────────────────────────────────────
   useEffect(() => {
@@ -2585,7 +2589,7 @@ function ChartGame() {
         // Persist daily result so it survives page reload
         if (!isPractice) {
           try {
-            localStorage.setItem(`chartle_daily_${seed}`, JSON.stringify({
+            localStorage.setItem(dailyKey, JSON.stringify({
               direction, sl: String(slNum), tp: String(tpNum),
               scoreData: finalScore, visibleFuture: chartData.future.length,
             }));
