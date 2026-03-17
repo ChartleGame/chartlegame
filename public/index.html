@@ -2613,6 +2613,7 @@ function ChartGame() {
         input[type=number] { -moz-appearance: textfield; }
         @keyframes fadeIn { from { opacity:0; transform:scale(0.95);} to {opacity:1;transform:scale(1);} }
         @keyframes pulse { 0%,100%{opacity:1;}50%{opacity:0.5;} }
+        @keyframes toastShrink { from { width: 100%; } to { width: 0%; } }
         body { font-weight: ${isDark ? 400 : 600}; }
         button:hover .tool-tip { opacity: 1 !important; }
         div:hover > div.tool-tip { opacity: 1 !important; }
@@ -3015,16 +3016,24 @@ function ChartGame() {
       )}
       {/* Toast notification */}
       {toast && (
-        <div style={{
+        <div onClick={() => setToast(null)} style={{
           position: "fixed", top: 20, right: 20, zIndex: 2000,
           background: T.surface, border: `1px solid ${T.greenBdr}`,
-          borderRadius: 10, padding: "12px 20px",
+          borderRadius: 10, padding: "12px 20px 0 20px",
           boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
           animation: "fadeIn 0.2s ease",
-          display: "flex", alignItems: "center", gap: 10,
+          cursor: "pointer", overflow: "hidden",
         }}>
-          <span style={{ color: T.green, fontSize: 14 }}>✓</span>
-          <span style={{ fontSize: 12, color: T.text, fontFamily: "'JetBrains Mono', monospace" }}>{toast}</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, paddingBottom: 12 }}>
+            <span style={{ color: T.green, fontSize: 14 }}>✓</span>
+            <span style={{ fontSize: 12, color: T.text, fontFamily: "'JetBrains Mono', monospace" }}>{toast}</span>
+          </div>
+          <div style={{
+            height: 3, borderRadius: "0 0 10px 10px",
+            background: T.green, opacity: 0.5,
+            animation: "toastShrink 3s linear forwards",
+            marginLeft: -20, marginRight: -20,
+          }} />
         </div>
       )}
     </div>
