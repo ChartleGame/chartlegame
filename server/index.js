@@ -257,6 +257,7 @@ app.post("/api/auth/login", async (req, res) => {
         status: user.subscription_status,
         stripeCustomerId: user.stripe_customer_id,
         stripeSubscriptionId: user.stripe_subscription_id,
+        activatedAt: user.subscription_activated_at,
       },
     },
   });
@@ -348,6 +349,7 @@ app.get("/api/user/me", requireAuth, async (req, res) => {
       status: user.subscription_status,
       stripeCustomerId: user.stripe_customer_id,
       stripeSubscriptionId: user.stripe_subscription_id,
+      activatedAt: user.subscription_activated_at,
     },
     createdAt:    user.created_at,
   });
