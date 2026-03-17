@@ -279,10 +279,40 @@ async function hasVotedConsensus(userId, seed) {
   return rows.length > 0;
 }
 
+// ── Seed admin/test account ───────────────────────────────────────────────────
+async function seedTestAccount() {
+  const email    = process.env.ADMIN_EMAIL;
+  const password = process.env.ADMIN_PASSWORD;
+  if (!email || !password) return; // no env vars set, skip
+
+  const existing = await getUserByEmail(email);
+  if (existing) {
+    // Ensure it's always marked as paid
+    if (existing.subscription_status !== "active") {
+      await updateUser(existing.id, { subscription_status: "active", subscription_activated_at: Date.now() });
+      console.log(`[DB] Admin account ${email} upgraded to active.`);
+    }
+    return;
+  }
+
+  const bcrypt = require("bcryptjs");
+  const { v4: uuid } = require("uuid");
+
+  const id = uuid();
+  const hash = await bcrypt.hash(password, 12);
+  await pool.query(
+    `INSERT INTO users (id, email, username, password_hash, verified, subscription_status, subscription_activated_at, created_at)
+     VALUES ($1, $2, $3, $4, true, 'active', $5, $5)`,
+    [id, email.toLowerCase(), "admin", hash, Date.now()]
+  );
+  console.log(`[DB] Admin account created: ${email} (Pro, verified)`);
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function init() {
   await initSchema();
   await migrateFromJSON();
+  await seedTestAccount();
 }
 
 module.exports = {
