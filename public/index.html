@@ -2145,6 +2145,7 @@ const LANG = {
     adminProSince: "Pro since",
     adminCancelSub: "CANCEL SUB",
     adminDeleteUser: "DELETE USER",
+    toastLoggedOut: "Successfully logged out",
   },
   fr: {
     dailyTrade: "TRADE QUOTIDIEN",
@@ -2291,6 +2292,7 @@ const LANG = {
     adminProSince: "Pro depuis",
     adminCancelSub: "ANNULER ABO",
     adminDeleteUser: "SUPPRIMER",
+    toastLoggedOut: "Déconnexion réussie",
   },
 };
 
@@ -2312,6 +2314,7 @@ function ChartGame() {
   const [paywallReason, setPaywallReason] = useState("daily_limit");
   const [showSettings, setShowSettings] = useState(false);
   const [showSubscription, setShowSubscription] = useState(false);
+  const [toast, setToast] = useState(null);
   const [practiceUsed, setPracticeUsed] = useState(0);
 
   // Sync practice usage from server on mount (and when user changes)
@@ -2516,8 +2519,8 @@ function ChartGame() {
     priceTagTxt:  "#0a0d14",
     scoreOverlay: "rgba(210,216,228,0.92)",
     pillBg:       "rgba(210,216,228,0.95)",
-    tooltipBg:    "#2a3040",
-    tooltipBdr:   "rgba(0,0,0,0.4)",
+    tooltipBg:    "#ffffff",
+    tooltipBdr:   "rgba(0,0,0,0.12)",
     bull:         "#007a40",
     bear:         "#c41f1f",
     volBull:      (f) => f ? "rgba(0,122,64,0.12)"   : "rgba(0,122,64,0.22)",
@@ -2666,7 +2669,7 @@ function ChartGame() {
             T={T} L={L}
             user={user}
             onLogin={() => setShowAuth(true)}
-            onLogout={() => { window.auth.clear(); setUser(null); }}
+            onLogout={() => { window.auth.clear(); setUser(null); setPage("game"); setToast(L.toastLoggedOut); setTimeout(() => setToast(null), 3000); }}
             onManage={handleManage}
           />
         </div>
@@ -3009,6 +3012,20 @@ function ChartGame() {
           onClose={() => setShowSubscription(false)}
           onUpgrade={handleUpgrade}
         />
+      )}
+      {/* Toast notification */}
+      {toast && (
+        <div style={{
+          position: "fixed", top: 20, right: 20, zIndex: 2000,
+          background: T.surface, border: `1px solid ${T.greenBdr}`,
+          borderRadius: 10, padding: "12px 20px",
+          boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
+          animation: "fadeIn 0.2s ease",
+          display: "flex", alignItems: "center", gap: 10,
+        }}>
+          <span style={{ color: T.green, fontSize: 14 }}>✓</span>
+          <span style={{ fontSize: 12, color: T.text, fontFamily: "'JetBrains Mono', monospace" }}>{toast}</span>
+        </div>
       )}
     </div>
   );
