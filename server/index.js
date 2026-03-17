@@ -23,6 +23,24 @@ const PRACTICE_DIR = path.join(DATA_DIR, "practice");
   if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
 });
 
+// ── Daily reset version (survives within a single deploy) ─────────────────────
+const RESET_FILE = path.join(DATA_DIR, "daily-reset.json");
+
+function getResetVersion() {
+  try {
+    if (fs.existsSync(RESET_FILE)) {
+      return JSON.parse(fs.readFileSync(RESET_FILE, "utf8")).version || 0;
+    }
+  } catch {}
+  return 0;
+}
+
+function incrementResetVersion() {
+  const next = getResetVersion() + 1;
+  fs.writeFileSync(RESET_FILE, JSON.stringify({ version: next, lastReset: new Date().toISOString() }), "utf8");
+  return next;
+}
+
 // ── Middleware ────────────────────────────────────────────────────────────────
 // Stripe webhooks need raw body — must come before express.json()
 app.post("/api/stripe/webhook",
@@ -76,6 +94,7 @@ function todayKey() {
 app.get("/api/chart/daily", optionalAuth, (req, res) => {
   const key  = todayKey();
   const file = path.join(DAILY_DIR, `${key}.json`);
+  const resetVersion = getResetVersion();
 
   if (!fs.existsSync(file)) {
     const files = fs.readdirSync(DAILY_DIR)
@@ -90,11 +109,11 @@ app.get("/api/chart/daily", optionalAuth, (req, res) => {
       });
     }
     const latest = JSON.parse(fs.readFileSync(path.join(DAILY_DIR, files[0]), "utf8"));
-    return res.json({ ...latest, isFallback: true });
+    return res.json({ ...latest, isFallback: true, resetVersion });
   }
 
   const chart = JSON.parse(fs.readFileSync(file, "utf8"));
-  res.json(chart);
+  res.json({ ...chart, resetVersion });
 });
 
 // GET /api/chart/practice/:id
@@ -524,7 +543,7 @@ app.post("/api/admin/users/:id/cancel-subscription", requireAuth, requireAdmin, 
   res.json({ ok: true, message: `Subscription cancelled for ${target.email}` });
 });
 
-// POST /api/admin/reset-daily — reset all daily data (consensus + practice usage)
+// POST /api/admin/reset-daily — reset all daily data (consensus + practice usage + daily attempts)
 app.post("/api/admin/reset-daily", requireAuth, requireAdmin, async (req, res) => {
   const d = new Date();
   const todaySeed = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
@@ -532,11 +551,12 @@ app.post("/api/admin/reset-daily", requireAuth, requireAdmin, async (req, res) =
 
   const consensusCleared = await db.clearConsensus(todaySeed);
   const practiceCleared = await db.clearPracticeSessions(today);
+  const newVersion = incrementResetVersion();
 
-  console.log(`[ADMIN] Reset daily: consensus=${consensusCleared}, practice=${practiceCleared}`);
+  console.log(`[ADMIN] Reset daily: consensus=${consensusCleared}, practice=${practiceCleared}, resetVersion=${newVersion}`);
   res.json({
     ok: true,
-    message: `Cleared ${consensusCleared} consensus votes and ${practiceCleared} practice sessions for today`,
+    message: `Reset v${newVersion}: cleared ${consensusCleared} consensus votes, ${practiceCleared} practice sessions. All users can replay today's chart.`,
   });
 });
 

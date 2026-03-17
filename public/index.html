@@ -2379,10 +2379,19 @@ function ChartGame() {
   // ── Restore today's daily result from localStorage if already played ───────
   const dailyKey = `chartle_daily_${user?.id || "anon"}_${seed}`;
   useEffect(() => {
+    if (!chartData && !isPractice) return; // wait for chart to load so we have resetVersion
     try {
       const saved = localStorage.getItem(dailyKey);
       if (saved && !isPractice) {
         const s = JSON.parse(saved);
+        // If admin reset happened since this result was saved, invalidate it
+        if (s.resetVersion !== undefined && chartData?.resetVersion !== undefined
+            && s.resetVersion !== chartData.resetVersion) {
+          console.log("[Chartle] Admin reset detected — clearing saved result.");
+          localStorage.removeItem(dailyKey);
+          resetTradeState();
+          return;
+        }
         setDirection(s.direction);
         setSl(s.sl);
         setTp(s.tp);
@@ -2394,7 +2403,7 @@ function ChartGame() {
         resetTradeState();
       }
     } catch {}
-  }, [seed, user]);
+  }, [seed, user, chartData]);
 
   // ── Invalidate saved result if the chart changed (e.g. after a redeploy) ──
   useEffect(() => {
@@ -2641,7 +2650,7 @@ function ChartGame() {
             localStorage.setItem(dailyKey, JSON.stringify({
               direction, sl: String(slNum), tp: String(tpNum),
               scoreData: finalScore, visibleFuture: chartData.future.length,
-              entryPrice,
+              entryPrice, resetVersion: chartData.resetVersion,
             }));
           } catch {}
           // Submit to consensus (fire and forget — server ignores duplicates)
