@@ -1009,11 +1009,41 @@ function AdminPanel({ T, L }) {
     fontFamily: "'JetBrains Mono', monospace",
   });
 
+  const resetDaily = async () => {
+    if (!window.confirm(L.adminConfirmReset)) return;
+    try {
+      const res = await window.apiFetch("/api/admin/reset-daily", { method: "POST" });
+      setMsg({ type: "ok", text: res.message });
+    } catch (e) {
+      setMsg({ type: "err", text: e.message });
+    }
+  };
+
   return (
     <div style={{ flex: 1, padding: 24, overflow: "auto", background: T.pageBg, color: T.text }}>
       <div style={{ maxWidth: 700, margin: "0 auto" }}>
         <div style={{ fontSize: 11, letterSpacing: 3, color: T.textMuted, marginBottom: 6 }}>{L.adminTitle}</div>
         <div style={{ fontSize: 20, fontWeight: 700, fontFamily: "'Space Grotesk', sans-serif", color: T.text, marginBottom: 20 }}>{L.adminUserMgmt}</div>
+
+        {/* Reset Daily section */}
+        <div style={{
+          background: T.surface, border: `1px solid ${T.border}`, borderRadius: 10,
+          padding: "16px 20px", marginBottom: 20,
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+        }}>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: T.text, marginBottom: 4 }}>{L.adminResetTitle}</div>
+            <div style={{ fontSize: 10, color: T.textMuted }}>{L.adminResetDesc}</div>
+          </div>
+          <button onClick={resetDaily} style={{
+            padding: "8px 16px", borderRadius: 6, border: "1px solid rgba(245,158,11,0.3)",
+            background: "rgba(245,158,11,0.08)", color: "#f59e0b", fontSize: 11,
+            fontWeight: 700, letterSpacing: 1, cursor: "pointer",
+            fontFamily: "'JetBrains Mono', monospace",
+          }}>
+            {L.adminResetBtn}
+          </button>
+        </div>
 
         {/* Search bar */}
         <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
@@ -1350,20 +1380,25 @@ function ConsensusPage({ seed, scoreData, direction, sl, tp, entryPrice, T, L, u
   const [submitted, setSubmitted] = useState(false);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // Just load the pool — submission happens in handleTrade
+  // Load the pool — submission happens in handleTrade
   useEffect(() => {
-    async function loadPool() {
-      try {
-        const res = await window.apiFetch(`/api/consensus/${seed}`);
-        if (res) {
-          setData(res.pool);
-          setSubmitted(res.hasVoted);
-        }
-      } catch {}
-      setLoading(false);
-    }
-    loadPool();
+    setLoading(true);
+    setError(null);
+    fetch(window.API_BASE + `/api/consensus/${seed}`, {
+      headers: window.auth.getToken() ? { "Authorization": "Bearer " + window.auth.getToken() } : {},
+    })
+      .then(r => r.json())
+      .then(res => {
+        setData(res.pool || []);
+        setSubmitted(res.hasVoted || false);
+      })
+      .catch(e => {
+        console.error("[Consensus] Load failed:", e);
+        setError(e.message);
+      })
+      .finally(() => setLoading(false));
   }, [seed, scoreData]);
 
   // Use real data if available, otherwise show dummy preview
@@ -2135,6 +2170,10 @@ const LANG = {
     adminProSince: "Pro since",
     adminCancelSub: "CANCEL SUB",
     adminDeleteUser: "DELETE USER",
+    adminResetTitle: "Reset Daily",
+    adminResetDesc: "Clear today's consensus votes and practice counters for all users.",
+    adminResetBtn: "RESET TODAY",
+    adminConfirmReset: "Reset all consensus votes and practice counters for today?",
     toastLoggedOut: "Successfully logged out",
   },
   fr: {
@@ -2282,6 +2321,10 @@ const LANG = {
     adminProSince: "Pro depuis",
     adminCancelSub: "ANNULER ABO",
     adminDeleteUser: "SUPPRIMER",
+    adminResetTitle: "Réinitialiser la journée",
+    adminResetDesc: "Effacer les votes consensus et compteurs de pratique de tous les utilisateurs.",
+    adminResetBtn: "RÉINITIALISER",
+    adminConfirmReset: "Réinitialiser tous les votes consensus et compteurs de pratique pour aujourd'hui ?",
     toastLoggedOut: "Déconnexion réussie",
   },
 };

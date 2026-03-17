@@ -10,7 +10,7 @@ const pool = new Pool({
   ssl: process.env.DB_SSL === "false" ? false : { rejectUnauthorized: false },
   max: 10,
   idleTimeoutMillis: 30000,
-}); 
+});
 
 pool.on("error", (err) => {
   console.error("[DB] Unexpected pool error:", err.message);
@@ -305,6 +305,13 @@ async function hasVotedConsensus(userId, seed) {
 async function clearConsensus(seed) {
   const { rowCount } = await pool.query("DELETE FROM consensus_votes WHERE seed = $1", [seed]);
   if (rowCount > 0) console.log(`[DB] Cleared ${rowCount} consensus votes for seed ${seed}`);
+  return rowCount;
+}
+
+async function clearPracticeSessions(dateKey) {
+  const { rowCount } = await pool.query("DELETE FROM practice_sessions WHERE date_key = $1", [dateKey]);
+  if (rowCount > 0) console.log(`[DB] Cleared ${rowCount} practice sessions for ${dateKey}`);
+  return rowCount;
 }
 
 // ── Seed admin/test account ───────────────────────────────────────────────────
@@ -351,4 +358,5 @@ module.exports = {
   getPracticeCount, incrementPractice,
   getJournalEntries, getJournalEntry, upsertJournalEntry,
   submitConsensus, getConsensusPool, hasVotedConsensus, clearConsensus,
+  clearPracticeSessions,
 };

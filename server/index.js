@@ -9,7 +9,7 @@ const fs         = require("fs");
 const path       = require("path");
 const stripe     = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const { Resend } = require("resend");
-const db         = require("./db"); 
+const db         = require("./db");
 
 const app    = express();
 const resend = new Resend(process.env.RESEND_API_KEY);
@@ -522,6 +522,22 @@ app.post("/api/admin/users/:id/cancel-subscription", requireAuth, requireAdmin, 
   await db.updateUser(target.id, { subscription_status: "cancelled" });
   console.log(`[ADMIN] Cancelled subscription for ${target.email} (${target.id})`);
   res.json({ ok: true, message: `Subscription cancelled for ${target.email}` });
+});
+
+// POST /api/admin/reset-daily — reset all daily data (consensus + practice usage)
+app.post("/api/admin/reset-daily", requireAuth, requireAdmin, async (req, res) => {
+  const d = new Date();
+  const todaySeed = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+  const today = todayKey();
+
+  const consensusCleared = await db.clearConsensus(todaySeed);
+  const practiceCleared = await db.clearPracticeSessions(today);
+
+  console.log(`[ADMIN] Reset daily: consensus=${consensusCleared}, practice=${practiceCleared}`);
+  res.json({
+    ok: true,
+    message: `Cleared ${consensusCleared} consensus votes and ${practiceCleared} practice sessions for today`,
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
