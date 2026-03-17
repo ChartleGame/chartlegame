@@ -302,6 +302,11 @@ async function hasVotedConsensus(userId, seed) {
   return rows.length > 0;
 }
 
+async function clearConsensus(seed) {
+  const { rowCount } = await pool.query("DELETE FROM consensus_votes WHERE seed = $1", [seed]);
+  if (rowCount > 0) console.log(`[DB] Cleared ${rowCount} consensus votes for seed ${seed}`);
+}
+
 // ── Seed admin/test account ───────────────────────────────────────────────────
 async function seedTestAccount() {
   const email    = process.env.ADMIN_EMAIL;
@@ -345,5 +350,5 @@ module.exports = {
   createUser, updateUser, deleteUser,
   getPracticeCount, incrementPractice,
   getJournalEntries, getJournalEntry, upsertJournalEntry,
-  submitConsensus, getConsensusPool, hasVotedConsensus,
+  submitConsensus, getConsensusPool, hasVotedConsensus, clearConsensus,
 };
