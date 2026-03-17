@@ -1579,8 +1579,8 @@ function AccountButton({ T, L, user, onLogin, onLogout, onManage }) {
 
           {/* Menu items */}
           {[
-            !isPaid && { label: L.upgradePro, action: onManage, highlight: true },
-            isPaid  && { label: L.manageSubscription, action: onManage },
+            !isPaid && { label: L.upgradePro, action: () => onManage("subscription"), highlight: true },
+            isPaid  && { label: L.manageSubscription, action: () => onManage("subscription") },
             { label: L.accountSettings, action: () => { setOpen(false); onManage("settings"); } },
             { label: "—", divider: true },
             { label: L.signOut, action: () => { setOpen(false); onLogout(); }, danger: true },
@@ -1601,6 +1601,103 @@ function AccountButton({ T, L, user, onLogin, onLogout, onManage }) {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Subscription Modal ─────────────────────────────────────────────────────────
+function SubscriptionModal({ T, L, user, onClose, onUpgrade }) {
+  const isPaid = user?.subscription?.status === "active";
+  const activatedAt = user?.subscription?.activatedAt;
+
+  const fmtSubDate = (ts) => {
+    if (!ts) return "—";
+    const d = new Date(ts);
+    return d.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+  };
+
+  const Row = ({ label, value, color }) => (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: `1px solid ${T.borderFaint}` }}>
+      <span style={{ fontSize: 11, color: T.textMuted, letterSpacing: 1 }}>{label}</span>
+      <span style={{ fontSize: 12, fontWeight: 700, color: color || T.text, fontFamily: "'Space Grotesk', sans-serif" }}>{value}</span>
+    </div>
+  );
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 1000,
+      background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+    }} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{
+        background: T.pageBg, border: `1px solid ${T.borderMed}`,
+        borderRadius: 14, padding: "28px", width: 400,
+        animation: "fadeIn 0.18s ease",
+      }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, letterSpacing: 2, color: T.text }}>{L.subTitle}</div>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: T.textMuted, cursor: "pointer", fontSize: 18 }}>✕</button>
+        </div>
+
+        {/* Plan badge */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+          <div style={{
+            width: 44, height: 44, borderRadius: 10,
+            background: isPaid ? T.greenGrad : T.surfaceMed,
+            border: `2px solid ${isPaid ? T.green : T.borderMed}`,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 20,
+          }}>
+            {isPaid ? "⭐" : "⬡"}
+          </div>
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 900, color: T.text, fontFamily: "'Space Grotesk', sans-serif" }}>
+              {isPaid ? "PRO" : "FREE"}
+            </div>
+            <div style={{ fontSize: 10, color: isPaid ? T.green : T.textMuted, letterSpacing: 1 }}>
+              {isPaid ? L.subActivePlan : L.subFreePlan}
+            </div>
+          </div>
+        </div>
+
+        {/* Details */}
+        <div style={{ background: T.surfaceMed, border: `1px solid ${T.borderFaint}`, borderRadius: 10, padding: "4px 16px", marginBottom: 20 }}>
+          <Row label={L.subPlan} value={isPaid ? "Chartle Pro" : "Chartle Free"} color={isPaid ? T.green : T.textMuted} />
+          <Row label={L.subStatus} value={isPaid ? L.subActive : L.subFree} color={isPaid ? T.green : T.textMuted} />
+          <Row label={L.subPrice} value={isPaid ? "$3.99 USD" + L.perMonth : "$0"} />
+          {isPaid && <Row label={L.subSince} value={fmtSubDate(activatedAt)} />}
+          <Row label={L.subPractice} value={isPaid ? L.subUnlimited : "3" + L.perDay} />
+        </div>
+
+        {/* Features comparison */}
+        {!isPaid && (
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 9, color: T.textLabel, letterSpacing: 2, marginBottom: 10 }}>{L.subProIncludes}</div>
+            {[L.unlimitedPractice, L.allAssets, L.fullJournal, L.prioritySupport].map((f, i) => (
+              <div key={i} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6 }}>
+                <span style={{ color: T.green, fontSize: 12 }}>✓</span>
+                <span style={{ fontSize: 11, color: T.text }}>{f}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Action buttons */}
+        {!isPaid ? (
+          <button onClick={() => { onClose(); onUpgrade(); }} style={{
+            width: "100%", padding: "14px", borderRadius: 8, border: "none",
+            background: T.greenGrad, color: "#000", fontSize: 13, fontWeight: 700,
+            letterSpacing: 2, cursor: "pointer", fontFamily: "'JetBrains Mono', monospace",
+            boxShadow: T.greenGlow,
+          }}>
+            {L.upgradeBtn}
+          </button>
+        ) : (
+          <div style={{ fontSize: 10, color: T.textDim, textAlign: "center", lineHeight: 1.7 }}>
+            {L.subManageHint}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -1872,6 +1969,21 @@ const LANG = {
     deleteWarning: "Deleting your account is permanent. All your journal entries and stats will be lost.",
     confirmPassword: "Enter password to confirm",
     deleteAccount: "DELETE MY ACCOUNT",
+    // Subscription modal
+    subTitle: "SUBSCRIPTION",
+    subActivePlan: "Active subscription",
+    subFreePlan: "Free plan",
+    subPlan: "PLAN",
+    subStatus: "STATUS",
+    subPrice: "PRICE",
+    subSince: "MEMBER SINCE",
+    subPractice: "PRACTICE CHARTS",
+    subActive: "Active",
+    subFree: "Free",
+    subUnlimited: "Unlimited",
+    perDay: "/day",
+    subProIncludes: "PRO INCLUDES",
+    subManageHint: "To update billing or cancel, contact support or use the Stripe billing portal when configured.",
   },
   fr: {
     dailyTrade: "TRADE QUOTIDIEN",
@@ -1988,6 +2100,21 @@ const LANG = {
     deleteWarning: "La suppression de votre compte est permanente. Toutes vos entrées de journal seront perdues.",
     confirmPassword: "Entrez votre mot de passe pour confirmer",
     deleteAccount: "SUPPRIMER MON COMPTE",
+    // Subscription modal
+    subTitle: "ABONNEMENT",
+    subActivePlan: "Abonnement actif",
+    subFreePlan: "Plan gratuit",
+    subPlan: "PLAN",
+    subStatus: "STATUT",
+    subPrice: "PRIX",
+    subSince: "MEMBRE DEPUIS",
+    subPractice: "GRAPHIQUES PRATIQUE",
+    subActive: "Actif",
+    subFree: "Gratuit",
+    subUnlimited: "Illimité",
+    perDay: "/jour",
+    subProIncludes: "PRO INCLUT",
+    subManageHint: "Pour modifier la facturation ou annuler, contactez le support ou utilisez le portail Stripe une fois configuré.",
   },
 };
 
@@ -2008,6 +2135,7 @@ function ChartGame() {
   const [showPaywall, setShowPaywall] = useState(false);
   const [paywallReason, setPaywallReason] = useState("daily_limit");
   const [showSettings, setShowSettings] = useState(false);
+  const [showSubscription, setShowSubscription] = useState(false);
   const [practiceUsed, setPracticeUsed] = useState(0);
 
   // Sync practice usage from server on mount (and when user changes)
@@ -2131,16 +2259,9 @@ function ChartGame() {
     } catch(e) { alert("Could not start checkout: " + e.message); }
   };
 
-  const handleManage = async (action) => {
+  const handleManage = (action) => {
     if (action === "settings") { setShowSettings(true); return; }
-    try {
-      const { url } = await window.apiFetch("/api/stripe/portal", { method: "POST" });
-      window.location.href = url;
-    } catch(e) {
-      // No subscription yet — start checkout
-      const { url } = await window.apiFetch("/api/stripe/checkout", { method: "POST" });
-      window.location.href = url;
-    }
+    if (action === "subscription" || !action) { setShowSubscription(true); return; }
   };
 
   // Theme tokens — swap between dark and light
@@ -2702,6 +2823,12 @@ function ChartGame() {
         <AccountSettingsModal T={T} L={L} user={user}
           onClose={() => setShowSettings(false)}
           onUserUpdate={(u) => { setUser(u); if (!u) { setShowSettings(false); } }}
+        />
+      )}
+      {showSubscription && user && (
+        <SubscriptionModal T={T} L={L} user={user}
+          onClose={() => setShowSubscription(false)}
+          onUpgrade={handleUpgrade}
         />
       )}
     </div>
