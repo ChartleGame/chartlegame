@@ -2362,7 +2362,7 @@ function ChartGame() {
               <span style={{ fontSize: 9, color: "#f59e0b", letterSpacing: 1 }}>⚠ {chartError}</span>
             )}
             {!isPractice && !chartError && (
-              <span style={{ fontSize: 9, color: T.textDim, letterSpacing: 2 }}>DAILY CHART</span>
+              <span style={{ fontSize: 9, color: T.textDim, letterSpacing: 2 }}>{L.dailyChartLabel}</span>
             )}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -2385,7 +2385,7 @@ function ChartGame() {
                 color: T.textMuted, fontFamily: "'JetBrains Mono', monospace",
                 transition: "all 0.15s",
               }}>
-              NEW PRACTICE CHART →
+              {L.newPracticeBtn}
             </button>
           </div>
         </div>
