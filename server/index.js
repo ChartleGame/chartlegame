@@ -326,13 +326,13 @@ app.get("/api/auth/verify", async (req, res) => {
 
   await db.updateUser(user.id, { verified: true, verify_token: null });
 
-  res.send(`<html><body style="margin:0;background:#080c18;min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:'Courier New',Courier,monospace;">
+  const redirectUrl = (process.env.FRONTEND_URL || "/") + "?verified=1";
+  res.send(`<html><head><meta http-equiv="refresh" content="2;url=${redirectUrl}"></head><body style="margin:0;background:#080c18;min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:'Courier New',Courier,monospace;">
     <div style="text-align:center;max-width:400px;padding:40px 32px;background:#0d1220;border:1px solid rgba(255,255,255,0.06);border-radius:16px;">
       <div style="margin-bottom:24px;"><span style="font-size:22px;font-weight:900;letter-spacing:3px;color:#e2e8f0;">CHAR</span><span style="font-size:22px;font-weight:900;letter-spacing:3px;color:#00a65a;">TLE</span></div>
       <div style="font-size:32px;margin-bottom:16px;">✓</div>
       <h2 style="color:#00a65a;font-size:16px;letter-spacing:1px;margin:0 0 12px;">Email Verified</h2>
-      <p style="color:#94a3b8;font-size:12px;margin:0 0 24px;">Your account is now active. You're ready to trade.</p>
-      <a href="${process.env.FRONTEND_URL || "/"}" style="display:inline-block;padding:12px 28px;background:linear-gradient(135deg,#00a65a,#00c96b);color:#000;text-decoration:none;border-radius:8px;font-weight:700;font-size:12px;letter-spacing:2px;">PLAY CHARTLE</a>
+      <p style="color:#94a3b8;font-size:12px;margin:0 0 24px;">Your account is now active. Redirecting...</p>
     </div>
   </body></html>`);
 });

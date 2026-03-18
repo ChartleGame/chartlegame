@@ -2442,6 +2442,22 @@ function ChartGame() {
   const [toast, setToast] = useState(null);
   const [practiceUsed, setPracticeUsed] = useState(0);
 
+  // ── Detect ?verified=1 redirect and refresh user data ─────────────────────
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("verified") === "1" && window.auth.isLoggedIn()) {
+      window.apiFetch("/api/user/me")
+        .then(data => {
+          const updated = { ...window.auth.getUser(), verified: data.verified };
+          window.auth.setUser(updated);
+          setUser(updated);
+        })
+        .catch(() => {});
+      // Clean up URL
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
+
   // Sync practice usage from server on mount (and when user changes)
   useEffect(() => {
     if (!user) { setPracticeUsed(0); return; }
