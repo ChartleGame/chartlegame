@@ -1671,7 +1671,12 @@ function AuthModal({ T, L, onSuccess, onClose }) {
   });
 
   const submit = async () => {
-    setError(""); setInfo(""); setLoading(true);
+    setError(""); setInfo("");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError(L.invalidEmail || "Please enter a valid email address");
+      return;
+    }
+    setLoading(true);
     try {
       if (mode === "forgot") {
         await window.apiFetch("/api/auth/forgot-password", {
@@ -2202,6 +2207,7 @@ const LANG = {
     emailPlaceholder: "Email", usernamePlaceholder: "Username",
     passwordPlaceholder: "Password (min 8 chars, 1 uppercase, 1 symbol)",
     noAccount: "No account? CREATE ONE →", forgotPassword: "Forgot password?",
+    invalidEmail: "Please enter a valid email address",
     backToSignIn: "← BACK TO SIGN IN",
     // Reset password page
     resetPageTitle: "RESET PASSWORD",
@@ -2368,6 +2374,7 @@ const LANG = {
     emailPlaceholder: "Courriel", usernamePlaceholder: "Nom d'utilisateur",
     passwordPlaceholder: "Mot de passe (8 car. min, 1 maj., 1 symbole)",
     noAccount: "Pas de compte ? EN CRÉER UN →", forgotPassword: "Mot de passe oublié ?",
+    invalidEmail: "Veuillez entrer une adresse courriel valide",
     backToSignIn: "← RETOUR À LA CONNEXION",
     // Reset password page
     resetPageTitle: "RÉINITIALISER LE MOT DE PASSE",

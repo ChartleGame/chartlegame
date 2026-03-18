@@ -210,6 +210,9 @@ app.post("/api/auth/signup", async (req, res) => {
   if (!email || !password || !username) {
     return res.status(400).json({ error: "Email, username and password are required" });
   }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ error: "Please enter a valid email address" });
+  }
   if (password.length < 8) {
     return res.status(400).json({ error: "Password must be at least 8 characters" });
   }
