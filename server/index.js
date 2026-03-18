@@ -779,6 +779,16 @@ cron.schedule("0 * * * *", async () => {
   }
 });
 
+// Twice daily (6am, 6pm) — delete unverified accounts older than 24 hours
+cron.schedule("0 6,18 * * *", async () => {
+  try {
+    const deleted = await db.deleteExpiredUnverified(24 * 60 * 60 * 1000);
+    if (deleted > 0) console.log(`[CRON] Cleaned up ${deleted} expired unverified accounts.`);
+  } catch (e) {
+    console.error("[CRON] Unverified cleanup failed:", e.message);
+  }
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // START — init DB, then listen
 // ─────────────────────────────────────────────────────────────────────────────

@@ -372,6 +372,16 @@ async function clearDailyScores(seed) {
   return rowCount;
 }
 
+async function deleteExpiredUnverified(maxAgeMs) {
+  const cutoff = Date.now() - maxAgeMs;
+  const { rowCount } = await pool.query(
+    "DELETE FROM users WHERE verified = false AND created_at < $1",
+    [cutoff]
+  );
+  if (rowCount > 0) console.log(`[DB] Deleted ${rowCount} unverified accounts older than ${Math.round(maxAgeMs / 3600000)}h`);
+  return rowCount;
+}
+
 // ── Seed admin/test account ───────────────────────────────────────────────────
 async function seedTestAccount() {
   const email    = process.env.ADMIN_EMAIL;
@@ -418,4 +428,5 @@ module.exports = {
   submitConsensus, getConsensusPool, hasVotedConsensus, clearConsensus,
   clearPracticeSessions,
   getDailyScore, saveDailyScore, clearDailyScores,
+  deleteExpiredUnverified,
 };
