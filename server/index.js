@@ -63,10 +63,14 @@ function requireAuth(req, res, next) {
   }
   try {
     req.user = jwt.verify(header.slice(7), process.env.JWT_SECRET);
-    next();
   } catch {
-    res.status(401).json({ error: "Invalid or expired token" });
+    return res.status(401).json({ error: "Invalid or expired token" });
   }
+  // Verify user still exists in DB (covers admin deletion, cleanup, etc.)
+  db.getUserById(req.user.id).then(user => {
+    if (!user) return res.status(401).json({ error: "Account no longer exists" });
+    next();
+  }).catch(() => res.status(500).json({ error: "Auth check failed" }));
 }
 
 function optionalAuth(req, res, next) {
