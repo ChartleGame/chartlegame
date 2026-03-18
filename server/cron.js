@@ -81,7 +81,7 @@ async function fetchStock(symbol, interval) {
     function:   fn,
     symbol,
     apikey:     AV_KEY,
-    outputsize: "compact", // last 100 data points
+    outputsize: "full", // need 200+ bars for MA warmup
     ...(isIntraday ? { interval } : {}),
   });
 
@@ -123,7 +123,7 @@ async function fetchCrypto(fromSymbol, toSymbol, interval) {
     symbol:       fromSymbol,
     market:       toSymbol,
     apikey:       AV_KEY,
-    outputsize:   "compact",
+    outputsize:   "full",
     ...(isIntraday ? { interval } : {}),
   });
 
@@ -163,7 +163,7 @@ async function fetchForex(fromSymbol, toSymbol, interval) {
     from_symbol:    fromSymbol,
     to_symbol:      toSymbol,
     apikey:         AV_KEY,
-    outputsize:     "compact",
+    outputsize:     "full",
     ...(isIntraday ? { interval } : {}),
   });
 
@@ -194,13 +194,13 @@ async function fetchForex(fromSymbol, toSymbol, interval) {
 }
 
 // ── Chart builder ─────────────────────────────────────────────────────────────
-// Takes raw bars (oldest first), picks last 100, uses 80 for display
+// Takes raw bars (oldest first), keeps last 300 (200 warmup + 80 display + buffer)
 // Generates 20 synthetic future candles from the last close
 function buildChart(bars, asset, tf, assetType) {
   if (bars.length < 30) throw new Error(`Not enough bars for ${asset}: got ${bars.length}`);
 
-  // Keep last 100 bars (80 display + 20 warmup for MAs)
-  const trimmed  = bars.slice(-100);
+  // Keep last 300 bars so MA100 has 200+ bars of warmup before the visible area
+  const trimmed  = bars.slice(-300);
   const last     = trimmed[trimmed.length - 1];
   const entryPrice = last.close;
 
