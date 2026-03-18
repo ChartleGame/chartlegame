@@ -2282,6 +2282,10 @@ const LANG = {
     adminResetDesc: "Clear today's consensus votes and practice counters for all users.",
     adminResetBtn: "RESET TODAY",
     adminConfirmReset: "Reset all consensus votes and practice counters for today?",
+    // Footer
+    footerTos: "Terms of Service",
+    footerPp: "Privacy Policy",
+    footerCopyright: "© 2026 Chartle. All rights reserved.",
     toastLoggedOut: "Successfully logged out",
   },
   fr: {
@@ -2449,6 +2453,10 @@ const LANG = {
     adminResetDesc: "Effacer les votes consensus et compteurs de pratique de tous les utilisateurs.",
     adminResetBtn: "RÉINITIALISER",
     adminConfirmReset: "Réinitialiser tous les votes consensus et compteurs de pratique pour aujourd'hui ?",
+    // Footer
+    footerTos: "Conditions d'utilisation",
+    footerPp: "Politique de confidentialité",
+    footerCopyright: "© 2026 Chartle. Tous droits réservés.",
     toastLoggedOut: "Déconnexion réussie",
   },
 };
@@ -3260,6 +3268,32 @@ function ChartGame() {
         </div>{/* end instruction box */}
         </div>{/* end sticky bottom panel */}
       </div>{/* end game page */}
+
+      {/* ── Footer ── */}
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "center", gap: 16,
+        padding: "6px 24px", borderTop: `1px solid ${T.borderFaint}`,
+        fontSize: 10, color: T.textDim, fontFamily: "'JetBrains Mono', monospace",
+        flexShrink: 0,
+      }}>
+        <span>{L.footerCopyright}</span>
+        <span style={{ color: T.borderMed }}>·</span>
+        <a href={`/terms?lang=${lang}`} style={{ color: T.textMuted, textDecoration: "none" }}
+          onMouseEnter={e => e.target.style.color = T.green}
+          onMouseLeave={e => e.target.style.color = T.textMuted}
+        >{L.footerTos}</a>
+        <span style={{ color: T.borderMed }}>·</span>
+        <a href={`/privacy?lang=${lang}`} style={{ color: T.textMuted, textDecoration: "none" }}
+          onMouseEnter={e => e.target.style.color = T.green}
+          onMouseLeave={e => e.target.style.color = T.textMuted}
+        >{L.footerPp}</a>
+        <span style={{ color: T.borderMed }}>·</span>
+        <a href="mailto:chartle@chartlegame.com" style={{ color: T.textMuted, textDecoration: "none" }}
+          onMouseEnter={e => e.target.style.color = T.green}
+          onMouseLeave={e => e.target.style.color = T.textMuted}
+        >chartle@chartlegame.com</a>
+      </div>
+
       {/* ── Modals ── */}
       {showAuth && (
         <AuthModal T={T} L={L}

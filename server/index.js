@@ -753,6 +753,67 @@ async function handleStripeWebhook(req, res) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// LEGAL PAGES — served as styled HTML
+// ─────────────────────────────────────────────────────────────────────────────
+function legalPage(title, mdPath, lang) {
+  const fs2 = require("fs");
+  let content = "";
+  if (fs2.existsSync(mdPath)) {
+    content = fs2.readFileSync(mdPath, "utf8")
+      .replace(/^# .+\n/m, "") // remove h1 (we use our own header)
+      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+      .replace(/^## (.+)$/gm, '<h2 style="color:#e2e8f0;font-size:16px;letter-spacing:1px;margin:32px 0 12px;font-weight:700;">$1</h2>')
+      .replace(/^### (.+)$/gm, '<h3 style="color:#94a3b8;font-size:14px;margin:24px 0 8px;font-weight:700;">$1</h3>')
+      .replace(/^- (.+)$/gm, '<div style="padding-left:20px;margin:4px 0;">· $1</div>')
+      .replace(/^---$/gm, '<hr style="border:none;border-top:1px solid rgba(255,255,255,0.06);margin:24px 0;">')
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" style="color:#00a65a;">$1</a>')
+      .replace(/\n\n/g, "</p><p>")
+      .replace(/\n/g, " ");
+    content = "<p>" + content + "</p>";
+  } else {
+    content = "<p>Content not available.</p>";
+  }
+  return `<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>${title} — Chartle</title></head>
+  <body style="margin:0;background:#080c18;color:#94a3b8;font-family:'Courier New',Courier,monospace;font-size:13px;line-height:1.8;">
+    <div style="max-width:720px;margin:0 auto;padding:40px 24px 60px;">
+      <div style="margin-bottom:32px;">
+        <a href="/" style="text-decoration:none;"><span style="font-size:22px;font-weight:900;letter-spacing:3px;color:#e2e8f0;">CHAR</span><span style="font-size:22px;font-weight:900;letter-spacing:3px;color:#00a65a;">TLE</span></a>
+      </div>
+      <h1 style="color:#e2e8f0;font-size:22px;letter-spacing:2px;margin:0 0 8px;font-weight:900;">${title}</h1>
+      <div style="height:2px;background:linear-gradient(90deg,#00a65a,transparent);margin-bottom:32px;"></div>
+      ${content}
+      <div style="margin-top:48px;padding-top:20px;border-top:1px solid rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;gap:16px;font-size:10px;color:#475569;">
+        <span>© 2026 Chartle</span>
+        <span style="color:rgba(255,255,255,0.1);">·</span>
+        <a href="/terms" style="color:#64748b;text-decoration:none;">Terms</a>
+        <span style="color:rgba(255,255,255,0.1);">·</span>
+        <a href="/privacy" style="color:#64748b;text-decoration:none;">Privacy</a>
+        <span style="color:rgba(255,255,255,0.1);">·</span>
+        <a href="mailto:chartle@chartlegame.com" style="color:#64748b;text-decoration:none;">chartle@chartlegame.com</a>
+      </div>
+    </div>
+  </body></html>`;
+}
+
+app.get("/terms", (req, res) => {
+  const lang = (req.query.lang || "en").toLowerCase();
+  const file = lang === "fr"
+    ? path.join(__dirname, "../legal/conditions-utilisation.md")
+    : path.join(__dirname, "../legal/terms-of-service.md");
+  const title = lang === "fr" ? "Conditions d'utilisation" : "Terms of Service";
+  res.send(legalPage(title, file, lang));
+});
+
+app.get("/privacy", (req, res) => {
+  const lang = (req.query.lang || "en").toLowerCase();
+  const file = lang === "fr"
+    ? path.join(__dirname, "../legal/politique-confidentialite.md")
+    : path.join(__dirname, "../legal/privacy-policy.md");
+  const title = lang === "fr" ? "Politique de confidentialité" : "Privacy Policy";
+  res.send(legalPage(title, file, lang));
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // SPA CATCH-ALL — serve index.html for any non-API route
 // ─────────────────────────────────────────────────────────────────────────────
 app.get("*", (req, res) => {
