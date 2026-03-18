@@ -2974,7 +2974,10 @@ function ChartGame() {
               <span style={{ fontSize: 9, color: "#f59e0b", letterSpacing: 1 }}>⚠ {chartError}</span>
             )}
             {!isPractice && !chartError && (
-              <span style={{ fontSize: 9, color: T.textDim, letterSpacing: 2 }}>{L.dailyChartLabel}</span>
+              <span style={{ fontSize: 9, color: T.textDim, letterSpacing: 2 }}>
+                {L.dailyChartLabel}
+                {chartData && <span title={chartData.assetType ? "API" : "Synthetic"} style={{ display: "inline-block", width: 5, height: 5, borderRadius: "50%", background: chartData.assetType ? "#00a65a" : "#475569", marginLeft: 6, verticalAlign: "middle" }} />}
+              </span>
             )}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
