@@ -2971,12 +2971,19 @@ function ChartGame() {
               </span>
             )}
             {chartError && (
-              <span style={{ fontSize: 9, color: "#f59e0b", letterSpacing: 1 }}>⚠ {chartError}</span>
+              <span style={{ fontSize: 9, color: "#f59e0b", letterSpacing: 1, display: "flex", alignItems: "center", gap: 8 }}>
+                ⚠ {chartError}
+                <span style={{ fontSize: 8, letterSpacing: 1, padding: "1px 6px", borderRadius: 3, background: "rgba(100,100,100,0.15)", color: "#64748b", border: "1px solid rgba(100,100,100,0.2)" }}>SYN</span>
+              </span>
             )}
             {!isPractice && !chartError && (
-              <span style={{ fontSize: 9, color: T.textDim, letterSpacing: 2 }}>
+              <span style={{ fontSize: 9, color: T.textDim, letterSpacing: 2, display: "flex", alignItems: "center", gap: 8 }}>
                 {L.dailyChartLabel}
-                {chartData && <span title={chartData.assetType ? "API" : "Synthetic"} style={{ display: "inline-block", width: 5, height: 5, borderRadius: "50%", background: chartData.assetType ? "#00a65a" : "#475569", marginLeft: 6, verticalAlign: "middle" }} />}
+                {chartData && (
+                  <span style={{ fontSize: 8, letterSpacing: 1, padding: "1px 6px", borderRadius: 3, background: chartData.assetType ? "rgba(0,166,90,0.12)" : "rgba(100,100,100,0.15)", color: chartData.assetType ? "#00a65a" : "#64748b", border: `1px solid ${chartData.assetType ? "rgba(0,166,90,0.25)" : "rgba(100,100,100,0.2)"}` }}>
+                    {chartData.assetType ? "API" : "SYN"}
+                  </span>
+                )}
               </span>
             )}
           </div>
