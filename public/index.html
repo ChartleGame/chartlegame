@@ -2196,6 +2196,15 @@ const LANG = {
     passwordPlaceholder: "Password (min 8 chars, 1 uppercase, 1 symbol)",
     noAccount: "No account? CREATE ONE →", forgotPassword: "Forgot password?",
     backToSignIn: "← BACK TO SIGN IN",
+    // Reset password page
+    resetPageTitle: "RESET PASSWORD",
+    resetPageMsg: "Enter your new password below.",
+    resetNewPw: "New password (min 8 chars)",
+    resetConfirmPw: "Confirm password",
+    resetSubmit: "UPDATE PASSWORD",
+    resetSuccess: "Password updated! You can now sign in.",
+    resetMismatch: "Passwords do not match.",
+    resetGoBack: "← BACK TO CHARTLE",
     // Account button
     signInBtn: "SIGN IN", signOut: "Sign out",
     upgradePro: "⭐ Upgrade to Pro — $3.99/mo",
@@ -2353,6 +2362,15 @@ const LANG = {
     passwordPlaceholder: "Mot de passe (8 car. min, 1 maj., 1 symbole)",
     noAccount: "Pas de compte ? EN CRÉER UN →", forgotPassword: "Mot de passe oublié ?",
     backToSignIn: "← RETOUR À LA CONNEXION",
+    // Reset password page
+    resetPageTitle: "RÉINITIALISER LE MOT DE PASSE",
+    resetPageMsg: "Entrez votre nouveau mot de passe ci-dessous.",
+    resetNewPw: "Nouveau mot de passe (8 car. min)",
+    resetConfirmPw: "Confirmer le mot de passe",
+    resetSubmit: "METTRE À JOUR",
+    resetSuccess: "Mot de passe mis à jour ! Vous pouvez vous connecter.",
+    resetMismatch: "Les mots de passe ne correspondent pas.",
+    resetGoBack: "← RETOUR À CHARTLE",
     // Account button
     signInBtn: "CONNEXION", signOut: "Se déconnecter",
     upgradePro: "⭐ Passer à Pro — 3,99 $/mois",
@@ -2422,8 +2440,91 @@ const LANG = {
 };
 
 // ── Main App ──────────────────────────────────────────────────────────────────
+// ── Reset Password Page ──────────────────────────────────────────────────────
+function ResetPasswordPage({ token, T, L }) {
+  const [pw, setPw] = React.useState("");
+  const [confirmPw, setConfirmPw] = React.useState("");
+  const [error, setError] = React.useState("");
+  const [success, setSuccess] = React.useState(false);
+  const [loading, setLoading] = React.useState(false);
+
+  const submit = async () => {
+    setError("");
+    if (pw.length < 8) { setError("Password must be at least 8 characters"); return; }
+    if (pw !== confirmPw) { setError(L.resetMismatch); return; }
+    setLoading(true);
+    try {
+      await window.apiFetch("/api/auth/reset-password", {
+        method: "POST",
+        body: JSON.stringify({ token, password: pw }),
+      });
+      setSuccess(true);
+    } catch (e) {
+      setError(e.message || "Something went wrong");
+    }
+    setLoading(false);
+  };
+
+  const inp = {
+    width: "100%", padding: "10px 14px", borderRadius: 6,
+    background: T.surfaceMed, border: `1px solid ${T.borderMed}`,
+    color: T.text, fontSize: 13, outline: "none",
+    fontFamily: "'JetBrains Mono', monospace",
+  };
+
+  return (
+    <div style={{ minHeight: "100vh", background: T.pageBg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'JetBrains Mono', monospace" }}>
+      <div style={{ width: 380, padding: "40px 32px", background: T.surface, border: `1px solid ${T.borderMed}`, borderRadius: 14 }}>
+        <div style={{ marginBottom: 28 }}>
+          <div style={{ fontSize: 20, fontWeight: 900, fontFamily: "'Space Grotesk', sans-serif", letterSpacing: -1, color: T.text }}>
+            CHAR<span style={{ color: T.green }}>TLE</span>
+          </div>
+          <div style={{ fontSize: 11, color: T.textMuted, letterSpacing: 2, marginTop: 4 }}>{L.resetPageTitle}</div>
+        </div>
+
+        {success ? (
+          <div>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>✓</div>
+            <div style={{ fontSize: 12, color: T.green, marginBottom: 24, lineHeight: 1.7 }}>{L.resetSuccess}</div>
+            <a href="/" style={{ color: T.green, fontSize: 11, letterSpacing: 1, textDecoration: "none" }}>{L.resetGoBack}</a>
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ fontSize: 12, color: T.textMuted, marginBottom: 4 }}>{L.resetPageMsg}</div>
+            <input style={inp} type="password" placeholder={L.resetNewPw} value={pw}
+              onChange={e => setPw(e.target.value)} />
+            <input style={inp} type="password" placeholder={L.resetConfirmPw} value={confirmPw}
+              onChange={e => setConfirmPw(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && submit()} />
+            {error && <div style={{ fontSize: 11, color: "#ff5050", padding: "4px 0" }}>{error}</div>}
+            <button onClick={submit} disabled={loading} style={{
+              width: "100%", padding: "12px", borderRadius: 6, border: "none",
+              background: T.greenGrad, color: "#000", fontSize: 12, fontWeight: 700,
+              letterSpacing: 1, cursor: "pointer", fontFamily: "'JetBrains Mono', monospace", marginTop: 4,
+            }}>{loading ? "..." : L.resetSubmit}</button>
+            <div style={{ textAlign: "center", marginTop: 12 }}>
+              <a href="/" style={{ color: T.textMuted, fontSize: 10, textDecoration: "none", letterSpacing: 1 }}>{L.resetGoBack}</a>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ChartGame() {
   const seed = getDailySeed();
+
+  // ── Route detection: /reset-password?token=xxx ──────────────────────────────
+  const [resetToken] = useState(() => {
+    if (window.location.pathname === "/reset-password") {
+      return new URLSearchParams(window.location.search).get("token");
+    }
+    return null;
+  });
+  const [isDark, setIsDark] = useState(true);
+  const [lang, setLang] = useState("en");
+  const L = LANG[lang];
 
   // ── Chart data — loaded from server, falls back to synthetic ────────────────
   const [chartData, setChartData]   = useState(null);
@@ -2480,9 +2581,6 @@ function ChartGame() {
   const [activeTool, setActiveTool] = useState(null);
   const [previewPrice, setPreviewPrice] = useState(null);
   const [clearSignal, setClearSignal] = useState(0);
-  const [isDark, setIsDark] = useState(true);
-  const [lang, setLang] = useState("en");
-  const L = LANG[lang];
 
   // ── Check server for existing daily score ────────────────────────────────────
   const dailyKey = `chartle_daily_${user?.id || "anon"}_${seed}`; // kept for cleanup only
@@ -2758,6 +2856,11 @@ function ChartGame() {
   const tradeLines = (phase !== "setup" || sl || tp) ? {
     sl: parseFloat(sl) || null, tp: parseFloat(tp) || null, direction
   } : null;
+
+  // ── Reset password page (intercepts before main app renders) ───────────────
+  if (resetToken) {
+    return <ResetPasswordPage token={resetToken} T={T} L={L} />;
+  }
 
   return (
     <div style={{ height: "100vh", background: T.pageBg, fontFamily: "'JetBrains Mono', monospace", color: T.text, display: "flex", flexDirection: "column", overflow: "hidden", fontWeight: isDark ? 400 : 600 }}>
