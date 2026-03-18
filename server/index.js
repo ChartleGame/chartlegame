@@ -230,15 +230,21 @@ app.post("/api/auth/signup", async (req, res) => {
       to: email,
       subject: "Verify your Chartle account",
       html: `
-        <div style="font-family: monospace; max-width: 480px; margin: 0 auto; padding: 40px 20px;">
-          <h2 style="color: #00a65a; letter-spacing: 2px;">CHARTLE</h2>
-          <p>Welcome, <strong>${username}</strong>!</p>
-          <p>Click the link below to verify your email address:</p>
-          <a href="${process.env.BASE_URL}/api/auth/verify?token=${verifyToken}"
-             style="display:inline-block;margin:20px 0;padding:12px 24px;background:#00a65a;color:#fff;text-decoration:none;border-radius:6px;font-weight:700;letter-spacing:1px;">
-            VERIFY EMAIL
-          </a>
-          <p style="color:#666;font-size:12px;">If you didn't create a Chartle account, ignore this email.</p>
+        <div style="background:#080c18;padding:40px 0;width:100%;">
+          <div style="max-width:460px;margin:0 auto;padding:40px 32px;background:#0d1220;border:1px solid rgba(255,255,255,0.06);border-radius:16px;font-family:'Courier New',Courier,monospace;">
+            <div style="margin-bottom:32px;">
+              <span style="font-size:22px;font-weight:900;letter-spacing:3px;color:#e2e8f0;">CHAR</span><span style="font-size:22px;font-weight:900;letter-spacing:3px;color:#00a65a;">TLE</span>
+            </div>
+            <div style="height:1px;background:linear-gradient(90deg,#00a65a,transparent);margin-bottom:28px;"></div>
+            <p style="color:#94a3b8;font-size:14px;line-height:1.7;margin:0 0 8px;">Welcome, <span style="color:#e2e8f0;font-weight:700;">${username}</span></p>
+            <p style="color:#64748b;font-size:13px;line-height:1.7;margin:0 0 28px;">Click below to verify your email and activate your account.</p>
+            <a href="${process.env.BASE_URL}/api/auth/verify?token=${verifyToken}"
+               style="display:inline-block;padding:14px 32px;background:linear-gradient(135deg,#00a65a,#00c96b);color:#000;text-decoration:none;border-radius:8px;font-weight:700;font-size:13px;letter-spacing:2px;font-family:'Courier New',Courier,monospace;">
+              VERIFY EMAIL
+            </a>
+            <div style="height:1px;background:rgba(255,255,255,0.04);margin:32px 0 20px;"></div>
+            <p style="color:#475569;font-size:11px;line-height:1.6;margin:0;">If you didn't create a Chartle account, you can safely ignore this email.</p>
+          </div>
         </div>
       `,
     });
@@ -307,18 +313,27 @@ app.get("/api/auth/verify", async (req, res) => {
   const user = await db.getUserByVerifyToken(token);
 
   if (!user) {
-    return res.send(`<html><body style="font-family:monospace;text-align:center;padding:60px">
-      <h2 style="color:#e03535">Invalid or expired verification link.</h2>
-      <a href="${process.env.FRONTEND_URL || "/"}">← Back to Chartle</a>
+    return res.send(`<html><body style="margin:0;background:#080c18;min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:'Courier New',Courier,monospace;">
+      <div style="text-align:center;max-width:400px;padding:40px 32px;background:#0d1220;border:1px solid rgba(255,255,255,0.06);border-radius:16px;">
+        <div style="margin-bottom:24px;"><span style="font-size:22px;font-weight:900;letter-spacing:3px;color:#e2e8f0;">CHAR</span><span style="font-size:22px;font-weight:900;letter-spacing:3px;color:#00a65a;">TLE</span></div>
+        <div style="font-size:32px;margin-bottom:16px;">✕</div>
+        <h2 style="color:#ff5050;font-size:16px;letter-spacing:1px;margin:0 0 12px;">Invalid or expired link</h2>
+        <p style="color:#64748b;font-size:12px;margin:0 0 24px;">This verification link is no longer valid. Please request a new one.</p>
+        <a href="${process.env.FRONTEND_URL || "/"}" style="color:#00a65a;font-size:12px;letter-spacing:1px;text-decoration:none;">← BACK TO CHARTLE</a>
+      </div>
     </body></html>`);
   }
 
   await db.updateUser(user.id, { verified: true, verify_token: null });
 
-  res.send(`<html><body style="font-family:monospace;text-align:center;padding:60px">
-    <h2 style="color:#00a65a">✓ Email verified!</h2>
-    <p>Your Chartle account is now active.</p>
-    <a href="${process.env.FRONTEND_URL || "/"}" style="color:#00a65a">← Play Chartle</a>
+  res.send(`<html><body style="margin:0;background:#080c18;min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:'Courier New',Courier,monospace;">
+    <div style="text-align:center;max-width:400px;padding:40px 32px;background:#0d1220;border:1px solid rgba(255,255,255,0.06);border-radius:16px;">
+      <div style="margin-bottom:24px;"><span style="font-size:22px;font-weight:900;letter-spacing:3px;color:#e2e8f0;">CHAR</span><span style="font-size:22px;font-weight:900;letter-spacing:3px;color:#00a65a;">TLE</span></div>
+      <div style="font-size:32px;margin-bottom:16px;">✓</div>
+      <h2 style="color:#00a65a;font-size:16px;letter-spacing:1px;margin:0 0 12px;">Email Verified</h2>
+      <p style="color:#94a3b8;font-size:12px;margin:0 0 24px;">Your account is now active. You're ready to trade.</p>
+      <a href="${process.env.FRONTEND_URL || "/"}" style="display:inline-block;padding:12px 28px;background:linear-gradient(135deg,#00a65a,#00c96b);color:#000;text-decoration:none;border-radius:8px;font-weight:700;font-size:12px;letter-spacing:2px;">PLAY CHARTLE</a>
+    </div>
   </body></html>`);
 });
 
@@ -340,14 +355,21 @@ app.post("/api/auth/forgot-password", async (req, res) => {
       to: user.email,
       subject: "Reset your Chartle password",
       html: `
-        <div style="font-family: monospace; max-width: 480px; margin: 0 auto; padding: 40px 20px;">
-          <h2 style="color: #00a65a; letter-spacing: 2px;">CHARTLE</h2>
-          <p>You requested a password reset.</p>
-          <a href="${process.env.BASE_URL}/reset-password?token=${resetToken}"
-             style="display:inline-block;margin:20px 0;padding:12px 24px;background:#00a65a;color:#fff;text-decoration:none;border-radius:6px;font-weight:700;letter-spacing:1px;">
-            RESET PASSWORD
-          </a>
-          <p style="color:#666;font-size:12px;">This link expires in 1 hour. If you didn't request this, ignore it.</p>
+        <div style="background:#080c18;padding:40px 0;width:100%;">
+          <div style="max-width:460px;margin:0 auto;padding:40px 32px;background:#0d1220;border:1px solid rgba(255,255,255,0.06);border-radius:16px;font-family:'Courier New',Courier,monospace;">
+            <div style="margin-bottom:32px;">
+              <span style="font-size:22px;font-weight:900;letter-spacing:3px;color:#e2e8f0;">CHAR</span><span style="font-size:22px;font-weight:900;letter-spacing:3px;color:#00a65a;">TLE</span>
+            </div>
+            <div style="height:1px;background:linear-gradient(90deg,#00a65a,transparent);margin-bottom:28px;"></div>
+            <p style="color:#94a3b8;font-size:14px;line-height:1.7;margin:0 0 8px;">Password Reset</p>
+            <p style="color:#64748b;font-size:13px;line-height:1.7;margin:0 0 28px;">Click below to choose a new password. This link expires in 1 hour.</p>
+            <a href="${process.env.BASE_URL}/reset-password?token=${resetToken}"
+               style="display:inline-block;padding:14px 32px;background:linear-gradient(135deg,#00a65a,#00c96b);color:#000;text-decoration:none;border-radius:8px;font-weight:700;font-size:13px;letter-spacing:2px;font-family:'Courier New',Courier,monospace;">
+              RESET PASSWORD
+            </a>
+            <div style="height:1px;background:rgba(255,255,255,0.04);margin:32px 0 20px;"></div>
+            <p style="color:#475569;font-size:11px;line-height:1.6;margin:0;">If you didn't request a password reset, you can safely ignore this email.</p>
+          </div>
         </div>
       `,
     });
